@@ -60,4 +60,3 @@ This command runs a specific test file. You can replace `tests/mcpServer_spec.lu
 ### Important Notes
 
 *   The test environment requires `plenary.nvim`. The test configuration file (`tests/nvim/init.lua`) assumes that `plenary.nvim` is located at `~/.local/share/nvim/lazy/plenary.nvim`. If your setup is different, you may need to adjust this path in the `init.lua` file.
->>>>>>> master
