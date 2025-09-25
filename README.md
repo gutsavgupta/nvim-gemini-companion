@@ -1,10 +1,11 @@
 # nvim-gemini-companion
 
-`nvim-gemini-companion` is a Neovim plugin that seamlessly integrates the Gemini CLI into your development workflow. It provides a powerful set of features that allow you to interact with the Gemini CLI without leaving the comfort of your editor. With this plugin, you can open diff views to compare your local changes with the Gemini CLI's suggestions, manage a CLI agent in a sidebar, and handle file changes with ease.
+`nvim-gemini-companion` is a Neovim plugin that integrates the Gemini CLI for a streamlined development experience. It allows you to use the Gemini CLI's features directly within Neovim, including diff views for suggested changes, a sidebar for managing the CLI agent, and automatic handling of file modifications. This plugin is designed for ease of use and can be customized to fit your workflow.
+
+![Watch the video](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/Screenshot_20250925-192514.png)
 
 ## Demo
-
-[![Watch the video](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/Screenshot_20250925-192514.png)](https://github.com/user-attachments/assets/bcce8fce-78d8-4f5a-8945-365ce636adf7)
+https://github.com/user-attachments/assets/bcce8fce-78d8-4f5a-8945-365ce636adf7
 
 ## Features
 
@@ -59,14 +60,18 @@ The following options are available in the `setup` function:
 
 To run the tests, you'll need to have `plenary.nvim` available. The test setup assumes a standard `lazy.nvim` directory structure.
 
-Execute the following command from the root of the repository:
+Execute the following command from the root of the repository
 
 ```bash
-XDG_CONFIG_HOME=$(pwd)/tests nvim --headless -c "PlenaryBustedFile tests/mcpServer_spec.lua"
+XDG_CONFIG_HOME=$(pwd)/tests nvim --headless -c "PlenaryBustedDirectory tests"
 ```
-
-This command runs a specific test file. You can replace `tests/mcpServer_spec.lua` with the path to any other test file you wish to run, or you can give `-c "PlenaryBustedDirectory tests"` to run all
+This command will run all tests in the `tests` directory. To test a single file try: `-c "PlenaryBustedFile tests/ideMcpServer_spec.lua"`
 
 ### Important Notes
 
 *   The test environment requires `plenary.nvim`. The test configuration file (`tests/nvim/init.lua`) assumes that `plenary.nvim` is located at `~/.local/share/nvim/lazy/plenary.nvim`. If your setup is different, you may need to adjust this path in the `init.lua` file.
+
+## Roadmap
+
+*   **LSP Diagnostics:** Send LSP diagnostic information to the Gemini CLI for enhanced debugging.
+*   **ACP Protocol:** Implement ACP protocol support for deeper integration.
