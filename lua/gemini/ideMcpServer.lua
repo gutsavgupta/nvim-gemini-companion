@@ -1,6 +1,6 @@
 local log = require('plenary.log').new({
   plugin = 'nvim-gemini-companion',
-  level = os.getenv('NGC_LOG_LEVEL') or 'debug',
+  level = os.getenv('NGC_LOG_LEVEL') or 'warn',
 })
 
 local IdeMcpClient = {}
@@ -77,7 +77,7 @@ function IdeMcpServer:start(port)
 
     local tcpClient = vim.uv.new_tcp()
     self.server:accept(tcpClient)
-    log.info('ideMcpServer: accepted new connection')
+    log.debug('ideMcpServer: accepted new connection')
     self.clientsObj[self.clientsIdx] = IdeMcpClient.new(
       self.clientsIdx,
       self.onClientRequest,
@@ -172,7 +172,7 @@ function IdeMcpClient:read()
       return
     end
     if not data then
-      log.info(
+      log.debug(
         string.format('ideMcpClient(c-%d): client disconnected.', self.clientId)
       )
       self:close()
@@ -218,7 +218,7 @@ end
 --- It stops any timers, closes the TCP handle, and cleans up resources.
 function IdeMcpClient:close()
   if not self.tcpClient then return end
-  log.info(string.format('ideMcpClient(c-%d): closing client', self.clientId))
+  log.debug(string.format('ideMcpClient(c-%d): closing client', self.clientId))
   if self.onClientClose then self.onClientClose() end
   if self.keepAliveTimer then self.keepAliveTimer:stop() end
   if not self.tcpClient:is_closing() then self.tcpClient:close() end
