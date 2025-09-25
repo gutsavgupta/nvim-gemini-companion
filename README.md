@@ -4,7 +4,7 @@
 
 ## Demo
 
-[![Watch the video](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/Screenshot_20250925-192514.png)](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/Screencast_20250925-190922.mp4)
+[![Watch the video](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/Screenshot_20250925-192514.png)](https://github.com/user-attachments/assets/bcce8fce-78d8-4f5a-8945-365ce636adf7)
 
 ## Features
 
