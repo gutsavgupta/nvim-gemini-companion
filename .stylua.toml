@@ -1,0 +1,23 @@
+# Syntax version
+syntax = "Lua54"
+
+# Line width guide
+column_width = 80
+
+# Indentation
+indent_type = "Spaces"
+indent_width = 2
+
+# Quote style
+quote_style = "AutoPreferSingle"
+
+# Function call parentheses
+call_parentheses = "Always"
+
+# Keep simple blocks/functions on one line
+collapse_simple_statement = "Always"
+
+# Optional: sort require statements
+[sort_requires]
+enabled = true
+
