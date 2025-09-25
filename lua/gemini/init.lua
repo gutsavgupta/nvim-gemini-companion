@@ -4,7 +4,7 @@
 
 local log = require('plenary.log').new({
   plugin = 'nvim-gemini-companion',
-  level = os.getenv('NGC_LOG_LEVEL') or 'info',
+  level = os.getenv('NGC_LOG_LEVEL') or 'warn',
 })
 
 local M = {}
@@ -145,7 +145,7 @@ end
 -- @param request table The JSON-RPC request object.
 local function handleMcpRequest(client, request)
   local method = request.method
-  log.info('Handling MCP request:', request)
+  log.debug('Handling MCP request:', request)
 
   if method == 'initialize' then
     handleInitialization(client, request)

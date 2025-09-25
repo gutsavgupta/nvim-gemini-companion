@@ -5,7 +5,7 @@
 
 local log = require('plenary.log').new({
   plugin = 'nvim-gemini-companion',
-  level = os.getenv('NGC_LOG_LEVEL') or 'info',
+  level = os.getenv('NGC_LOG_LEVEL') or 'warn',
 })
 
 local MAX_FILES = 10
