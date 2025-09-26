@@ -8,8 +8,8 @@ local log = require('plenary.log').new({
   level = os.getenv('NGC_LOG_LEVEL') or 'warn',
 })
 
-local MAX_FILES = 10
 local manager = {}
+local maxFiles = 10
 local state = {
   openFiles = {},
   isTrusted = true, -- Neovim doesn't have a direct equivalent of VS Code's workspace trust
@@ -77,7 +77,7 @@ local function addOrMoveToFront(bufnr)
   table.insert(state.openFiles, 1, fileInfo)
 
   -- Enforce max length
-  if #state.openFiles > MAX_FILES then table.remove(state.openFiles) end
+  if #state.openFiles > maxFiles then table.remove(state.openFiles) end
 end
 
 ---

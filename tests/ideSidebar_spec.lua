@@ -1,4 +1,4 @@
--- This file was created on September 25, 2025
+-- This file was created on September 26, 2025
 -- This file contains tests for the ideSidebar.lua module.
 
 local assert = require('luassert')
@@ -6,119 +6,131 @@ local match = require('luassert.match')
 local spy = require('luassert.spy')
 
 describe('ideSidebar', function()
-  local sidebar
-  local original_termopen
-  local original_jobstop
+  local ideSidebar
+  local snacks_terminal_spy
+  local term_spy
+  local configOpts
 
   before_each(function()
-    -- Go to the first tab and close all others to ensure a clean state
-    vim.api.nvim_set_current_tabpage(1)
-    vim.cmd('silent! tabonly')
-
     -- Reset the module to clear the state
-    package.loaded.ideSidebar = nil
-    sidebar = require('ideSidebar')
+    package.loaded['gemini.ideSidebar'] = nil
+    package.loaded['snacks.terminal'] = nil
 
-    -- Mock terminal functions
-    original_termopen = vim.fn.termopen
-    original_jobstop = vim.fn.jobstop
-    vim.fn.termopen = spy.new(function() return 123 end)
+    -- Mock snacks.terminal
+    term_spy = {
+      close = spy.new(function() end),
+      on = spy.new(function() end),
+      buf_valid = function() return true end,
+      buf = 1,
+    }
+    snacks_terminal_spy = {
+      toggle = spy.new(function() end),
+      get = spy.new(function() return term_spy end),
+    }
+    package.loaded['snacks.terminal'] = snacks_terminal_spy
+    vim.api.nvim_buf_get_var = spy.new(function() return 123 end)
+    vim.api.nvim_chan_send = spy.new(function() end)
     vim.fn.jobstop = spy.new(function() end)
+    vim.api.nvim_create_user_command = spy.new(function() end)
+    vim.fn.getcwd = spy.new(function() return '/fake/dir' end)
+
+    ideSidebar = require('gemini.ideSidebar')
+    configOpts = {
+      port = 12345,
+      cmd = 'gemini',
+      env = {},
+      win = {
+        position = 'right',
+        fixed = true,
+      },
+    }
   end)
 
-  after_each(function()
-    sidebar.close()
-    vim.fn.termopen = original_termopen
-    vim.fn.jobstop = original_jobstop
-  end)
-
-  it('should setup with default and custom options', function()
-    -- 1. Spy on nvim_win_set_width
-    local nvim_win_set_width_spy = spy.on(vim.api, 'nvim_win_set_width')
-
-    -- 2. Setup with custom options
-    local opts = { width = 100, command = 'my-command', port = 12345 }
-    sidebar.setup(opts)
-
-    -- 3. Open sidebar
-    sidebar.open()
-
-    -- 4. Assert that nvim_win_set_width was called with the correct width
-    assert.spy(nvim_win_set_width_spy).was.called()
-    assert.spy(nvim_win_set_width_spy).was.called_with(match.is_number(), 100)
-
-    -- Restore the original function
-    nvim_win_set_width_spy:revert()
-  end)
-
-  it('should open and close the sidebar', function()
-    -- 1. Check initial state
-    assert.are.equal(
-      1,
-      #vim.api.nvim_list_wins(),
-      'Should start with one window'
+  it('should setup user commands', function()
+    ideSidebar.setup({ port = 12345 })
+    assert.spy(vim.api.nvim_create_user_command).was.called(6)
+    assert
+      .spy(vim.api.nvim_create_user_command).was
+      .called_with('GeminiToggle', match.is_function(), { desc = 'Toggle Gemini sidebar' })
+    assert
+      .spy(vim.api.nvim_create_user_command).was
+      .called_with('GeminiClose', match.is_function(), { desc = 'Close Gemini sidebar' })
+    assert.spy(vim.api.nvim_create_user_command).was.called_with(
+      'GeminiSend',
+      match.is_function(),
+      { nargs = '*', desc = 'Send text to Gemini sidebar' }
     )
-
-    -- 2. Open the sidebar
-    sidebar.open()
-
-    -- 3. Assert that a new window is opened
-    assert.are.equal(
-      2,
-      #vim.api.nvim_list_wins(),
-      'Should have opened a new window'
+    assert.spy(vim.api.nvim_create_user_command).was.called_with(
+      'GeminiSendFileDiagnostic',
+      match.is_function(),
+      { desc = 'Send file diagnostics to Gemini sidebar' }
     )
-    local winId = vim.api.nvim_get_current_win()
-    assert.is_true(vim.wo[winId].winfixwidth)
-
-    -- 4. Close the sidebar
-    sidebar.close()
-
-    -- 5. Assert that the window is closed
-    assert.are.equal(
-      1,
-      #vim.api.nvim_list_wins(),
-      'Should have only one window after close'
+    assert.spy(vim.api.nvim_create_user_command).was.called_with(
+      'GeminiSendLineDiagnostic',
+      match.is_function(),
+      { desc = 'Send line diagnostics to Gemini sidebar' }
     )
-    assert.spy(vim.fn.jobstop).was_called_with(123)
+    assert.spy(vim.api.nvim_create_user_command).was.called_with(
+      'GeminiSwitchSidebarStyle',
+      match.is_function(),
+      match.is_table()
+    )
   end)
 
   it('should toggle the sidebar', function()
-    -- 1. Open the sidebar
-    sidebar.open()
-    assert.are.equal(2, #vim.api.nvim_list_wins(), 'Sidebar should be open')
-
-    -- 2. Toggle to hide
-    sidebar.toggle()
-    assert.are.equal(1, #vim.api.nvim_list_wins(), 'Sidebar should be hidden')
-
-    -- 3. Toggle to open again
-    sidebar.toggle()
-    assert.are.equal(
-      2,
-      #vim.api.nvim_list_wins(),
-      'Sidebar should be open again'
-    )
+    ideSidebar.toggle(configOpts)
+    assert
+      .spy(snacks_terminal_spy.toggle).was
+      .called_with(configOpts.cmd, configOpts)
   end)
 
-  it('should focus existing sidebar on open', function()
-    -- 1. Open the sidebar
-    sidebar.open()
-    local winId1 = vim.api.nvim_get_current_win()
+  it('should close the sidebar', function()
+    ideSidebar.close(configOpts)
+    assert
+      .spy(snacks_terminal_spy.get).was
+      .called_with(configOpts.cmd, configOpts)
+    assert.spy(vim.fn.jobstop).was.called_with(123)
+    assert.spy(term_spy.on).was.called()
+  end)
 
-    -- 2. Go to another window
-    vim.cmd('wincmd p')
-    assert.is_not_equal(winId1, vim.api.nvim_get_current_win())
+  it('should send text to the sidebar', function()
+    local text = 'Hello, Gemini!'
+    ideSidebar.sendText(configOpts, text)
+    assert
+      .spy(snacks_terminal_spy.get).was
+      .called_with(configOpts.cmd, configOpts)
+    local bracketStart = '\27[200~'
+    local bracketEnd = '\27[201~\r'
+    local bracketedText = bracketStart .. text .. bracketEnd
+    assert.spy(vim.api.nvim_chan_send).was.called_with(123, bracketedText)
+  end)
 
-    -- 3. Call open again
-    sidebar.open()
+  it('should not send text if terminal is invalid', function()
+    term_spy.buf_valid = function() return false end
+    local text = 'Hello, Gemini!'
+    ideSidebar.sendText(configOpts, text)
+    assert
+      .spy(snacks_terminal_spy.get).was
+      .called_with(configOpts.cmd, configOpts)
+    assert.spy(vim.api.nvim_chan_send).was.not_called()
+  end)
 
-    -- 4. Assert that the current window is the sidebar window
-    assert.are.equal(winId1, vim.api.nvim_get_current_win())
-    assert.are.equal(
-      2,
-      #vim.api.nvim_list_wins(),
-      'Should not open a new window'
-    )
+  it('should not send text if channel is not found', function()
+    vim.api.nvim_buf_get_var = spy.new(function() return nil end)
+    local text = 'Hello, Gemini!'
+    ideSidebar.sendText(configOpts, text)
+    assert
+      .spy(snacks_terminal_spy.get).was
+      .called_with(configOpts.cmd, configOpts)
+    assert.spy(vim.api.nvim_chan_send).was.not_called()
+  end)
+
+  it('should not close if terminal is not found', function()
+    snacks_terminal_spy.get = spy.new(function() return nil end)
+    ideSidebar.close(configOpts)
+    assert
+      .spy(snacks_terminal_spy.get).was
+      .called_with(configOpts.cmd, configOpts)
+    assert.spy(vim.fn.jobstop).was.not_called()
   end)
 end)

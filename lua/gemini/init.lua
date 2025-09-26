@@ -6,7 +6,6 @@ local log = require('plenary.log').new({
   plugin = 'nvim-gemini-companion',
   level = os.getenv('NGC_LOG_LEVEL') or 'warn',
 })
-
 local M = {}
 
 -- Defer loading of modules to speed up startup
@@ -178,6 +177,7 @@ function M.setup(opts)
   })
   local port = server:start(0) -- Listen on a random port
   log.info('MCP Server started on port: ' .. port)
+  opts.port = port
   vim.api.nvim_create_autocmd('VimLeave', {
     pattern = '*',
     callback = function() server:stop() end,
@@ -194,11 +194,7 @@ function M.setup(opts)
   end)
 
   -- 3. Setup sidebar
-  ideSidebar.setup({
-    port = port,
-    command = opts.command,
-    width = opts.width,
-  })
+  ideSidebar.setup(opts)
 
   -- 4. Setup diff manager
   ideDiffManager.setup()

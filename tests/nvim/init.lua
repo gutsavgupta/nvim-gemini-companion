@@ -4,11 +4,17 @@
 -- =============================================================================
 -- IMPORTANT: SET UP PLENARY.NVIM PATH
 -- =============================================================================
-local plenary_path = vim.fn.expand('$HOME/.local/share/nvim/lazy/plenary.nvim')
-if vim.fn.isdirectory(plenary_path) == 1 then
-  vim.opt.runtimepath:prepend(plenary_path)
-else
-  print('WARNING: plenary.nvim not found at ' .. plenary_path)
+local plugin_paths = {
+  vim.fn.expand('$HOME/.local/share/nvim/lazy/plenary.nvim'),
+  vim.fn.expand('$HOME/.local/share/nvim/lazy/snacks.nvim')
+}
+
+for _, path in ipairs(plugin_paths) do
+  if vim.fn.isdirectory(path) == 1 then
+    vim.opt.runtimepath:prepend(path)
+  else
+    print('WARNING: not a valid path: ' .. path)
+  end
 end
 
 -- =============================================================================
@@ -27,5 +33,10 @@ vim.opt.swapfile = false
 vim.opt.backup = false
 
 print('Test environment initialized successfully.')
-require('gemini').setup()
-
+require('snacks').setup()
+require('gemini').setup({
+  win = {
+    position = 'float',
+    border = 'rounded'
+  }
+})
