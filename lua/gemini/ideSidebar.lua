@@ -7,7 +7,16 @@ local log = require('plenary.log').new({
 })
 
 local ideSidebar = {}
-local skterminal = require('snacks.terminal')
+local snacksAvailable, skterminal = pcall(require, 'snacks.terminal')
+
+if not snacksAvailable then
+  vim.notify(
+    'nvim-gemini-companion: snacks.nvim not found. Please add `folke/snacks.nvim` as a dependency in your lazy.nvim configuration.',
+    vim.log.levels.ERROR
+  )
+  return
+end
+
 local defaults = {
   port = nil,
   cmd = 'gemini',
@@ -135,7 +144,7 @@ function ideSidebar.sendDiagnostic(opts, bufnr, linenumber)
   }
 
   local diagnosticString = vim.fn.json_encode(diagnosticData)
-  ideSidebar.sendText(opts, 'diagnostics: ' .. diagnosticString)
+  ideSidebar.sendText(opts, diagnosticString)
 end
 
 --- Sets the style of the sidebar window.

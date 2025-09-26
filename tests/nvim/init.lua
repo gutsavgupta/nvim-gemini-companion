@@ -6,7 +6,7 @@
 -- =============================================================================
 local plugin_paths = {
   vim.fn.expand('$HOME/.local/share/nvim/lazy/plenary.nvim'),
-  vim.fn.expand('$HOME/.local/share/nvim/lazy/snacks.nvim'),
+  vim.fn.expand('$HOME/.local/share/nvim/lazy/snacks.nvim')
 }
 
 for _, path in ipairs(plugin_paths) do
@@ -37,6 +37,6 @@ require('snacks').setup()
 require('gemini').setup({
   win = {
     position = 'float',
-    border = 'rounded',
-  },
+    border = 'rounded'
+  }
 })

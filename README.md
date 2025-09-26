@@ -2,7 +2,8 @@
 
 `nvim-gemini-companion` is a Neovim plugin that integrates the Gemini CLI for a streamlined development experience. It allows you to use the Gemini CLI's features directly within Neovim, including diff views for suggested changes, a sidebar for managing the CLI agent, and automatic handling of file modifications. This plugin is designed for ease of use and can be customized to fit your workflow.
 
-![Watch the video](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/Screenshot_20250925-192514.png)
+![Floating Sidebar](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/gemini-20250926-floating.png)
+![Right Fixed Sidebar](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/gemini-20250926-right-fixed.png)
 
 ## Demo
 https://github.com/user-attachments/assets/bcce8fce-78d8-4f5a-8945-365ce636adf7
