@@ -1,4 +1,3 @@
--- /home/fedoralab/github/nvim-gemini-companion/tests/init.lua
 -- This is a minimal init file for running tests.
 -- It sets up the necessary paths for the test environment.
 -- =============================================================================
@@ -6,7 +5,7 @@
 -- =============================================================================
 local plugin_paths = {
   vim.fn.expand('$HOME/.local/share/nvim/lazy/plenary.nvim'),
-  vim.fn.expand('$HOME/.local/share/nvim/lazy/snacks.nvim')
+  vim.fn.expand('$HOME/.local/share/nvim/lazy/snacks.nvim'),
 }
 
 for _, path in ipairs(plugin_paths) do
@@ -36,7 +35,6 @@ print('Test environment initialized successfully.')
 require('snacks').setup()
 require('gemini').setup({
   win = {
-    position = 'float',
-    border = 'rounded'
-  }
+    preset = 'floating',
+  },
 })
