@@ -10,8 +10,9 @@ This file outlines the project structure and coding guidelines for the `nvim-gem
 
 ## Coding Guidelines
 
+*   **Testing:** Run `XDG_CONFIG_HOME=$(pwd)/tests nvim --headless -c "PlenaryBustedDirectory tests"` to ensure all tests pass before committing changes.
 *   **Testing:** Use Lua for tests to ensure testability and a stable release process.
-*   **Formatting:** Auto-format all code with `lua-format` before committing.
+*   **Formatting:** Auto-format all code with `stylua` before committing.
 *   **Naming:** Use camelCase for all naming (variables, files, etc.).
 *   **Modern Lua:** Keep Lua modules modern and isolated. Use `require` for dependencies and avoid global variables.
 *   **No License Headers:** Do not add license headers to new files to keep them simple and minimal.
