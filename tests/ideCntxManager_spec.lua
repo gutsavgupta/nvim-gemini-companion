@@ -2,7 +2,7 @@
 -- This file contains tests for the ideCntxManager.lua module.
 
 local assert = require('luassert')
-require('plenary.nvim')
+
 local spy = require('luassert.spy')
 
 describe('ideCntxManager', function()
