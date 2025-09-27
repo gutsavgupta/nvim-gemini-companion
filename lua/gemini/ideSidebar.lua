@@ -11,7 +11,9 @@ local snacksAvailable, skterminal = pcall(require, 'snacks.terminal')
 
 if not snacksAvailable then
   vim.notify(
-    'nvim-gemini-companion: snacks.nvim not found. Please add `folke/snacks.nvim` as a dependency in your lazy.nvim configuration.',
+    'nvim-gemini-companion: snacks.nvim not found.'
+      .. ' Please add `folke/snacks.nvim` as a dependency'
+      .. ' in your lazy.nvim configuration.',
     vim.log.levels.ERROR
   )
   return
@@ -89,11 +91,17 @@ end
 -- @param text string The text to send to the terminal.
 function ideSidebar.sendText(opts, text)
   local terminal = skterminal.get(opts.cmd, opts)
-  -- TODO: add debud log
-  if not terminal or not terminal:buf_valid() then return end
+  if not terminal or not terminal:buf_valid() then
+    log.debug('Terminal not found or not valid')
+    return
+  end
+  terminal:show()
+  terminal:focus()
   local channel = vim.api.nvim_buf_get_var(terminal.buf, 'terminal_job_id')
-  -- TODO: add bebug log
-  if not channel then return end
+  if not channel then
+    log.debug('Terminal channel not found')
+    return
+  end
   local bracketStart = '\27[200~'
   local bracketEnd = '\27[201~\r'
   local bracketedText = bracketStart .. text .. bracketEnd
@@ -120,7 +128,7 @@ function ideSidebar.sendDiagnostic(opts, bufnr, linenumber)
     if linenumber == nil or (diag.lnum + 1) == linenumber then -- LSP is 0-indexed, user is 1-indexed
       table.insert(filteredDiagnostics, {
         linenumber = diag.lnum + 1,
-        severity = diag.severity,
+        severity = vim.diagnostic.severity[diag.severity],
         message = diag.message,
         source = diag.source,
       })
@@ -257,7 +265,8 @@ function ideSidebar.setup(opts)
     end,
     {
       nargs = '?',
-      desc = 'Switch the style of the Gemini sidebar. Presets: right-fixed, left-fixed, bottom-fixed, floating',
+      desc = 'Switch the style of the Gemini sidebar. Presets:'
+        .. vim.inspect(presets),
       complete = function() return vim.tbl_keys(presets) end,
     }
   )
