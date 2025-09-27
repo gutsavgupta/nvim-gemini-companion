@@ -128,7 +128,7 @@ function ideSidebar.sendDiagnostic(opts, bufnr, linenumber)
     if linenumber == nil or (diag.lnum + 1) == linenumber then -- LSP is 0-indexed, user is 1-indexed
       table.insert(filteredDiagnostics, {
         linenumber = diag.lnum + 1,
-        severity = diag.severity,
+        severity = vim.diagnostic.severity[diag.severity],
         message = diag.message,
         source = diag.source,
       })
