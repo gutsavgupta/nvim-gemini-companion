@@ -20,6 +20,8 @@ describe('ideSidebar', function()
     term_spy = {
       close = spy.new(function() end),
       on = spy.new(function() end),
+      show = spy.new(function() end),
+      focus = spy.new(function() end),
       buf_valid = function() return true end,
       buf = 1,
     }
