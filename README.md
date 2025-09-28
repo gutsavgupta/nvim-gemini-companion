@@ -1,6 +1,8 @@
 # nvim-gemini-companion
 
-`nvim-gemini-companion` is a Neovim plugin that integrates the Gemini CLI for a streamlined development experience. It allows you to use the Gemini CLI's features directly within Neovim, including diff views for suggested changes, a sidebar for managing the CLI agent, and automatic handling of file modifications. This plugin is designed for ease of use and can be customized to fit your workflow.
+Gemini CLI companion now speaks Qwen! 🚀
+
+`nvim-gemini-companion` is a Neovim plugin that integrates the Gemini CLI + Qwen-Code for a streamlined development experience. It allows you to use the Gemini/Qwen CLI's features directly within Neovim, including diff views for suggested changes, a sidebar for managing the CLI agent, and automatic handling of file modifications. This plugin is designed for ease of use and can be customized to fit your workflow.
 
 ![Floating Sidebar](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/gemini-20250926-floating.png)
 -------
@@ -44,7 +46,7 @@ You can install the plugin using `lazy.nvim`:
     -- You can configure the plugin by passing a table to the setup function
     -- Example:
     -- require("gemini").setup({
-    --   cmd = "gemini",
+    --   cmds = {"gemini"},
     --   win = {
     --     preset = "floating",
     --     width = 0.8,

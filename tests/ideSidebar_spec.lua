@@ -33,6 +33,7 @@ describe('ideSidebar', function()
     }
     package.loaded['snacks.terminal'] = skterminal_spy
 
+    vim.fn.executable = spy.new(function() return 1 end)
     vim.api.nvim_buf_get_var = spy.new(function() return 123 end)
     vim.api.nvim_chan_send = spy.new(function() end)
     vim.fn.jobstop = spy.new(function() end)
@@ -99,6 +100,18 @@ describe('ideSidebar', function()
       local opts = skterminal_spy.get.calls[1].vals[2]
       assert.equal(opts.env.QWEN_CODE_IDE_WORKSPACE_PATH, '/fake/dir')
       assert.equal(opts.env.QWEN_CODE_IDE_SERVER_PORT, '12345')
+    end)
+
+    it('should not initialize opts for non-executable commands', function()
+      vim.fn.executable = spy.new(function(cmd)
+        if cmd == 'gemini' then return 0 end
+        return 1
+      end)
+      ideSidebar.setup({ cmds = { 'gemini', 'qwen' } })
+      ideSidebar.toggle()
+      -- only qwen should be initialized
+      assert.spy(skterminal_spy.get).was.called_with('qwen', match.is_table())
+      assert.spy(skterminal_spy.get).was.not_called_with('gemini', match.is_table())
     end)
   end)
 

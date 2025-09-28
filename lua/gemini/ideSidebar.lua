@@ -239,9 +239,17 @@ function ideSidebar.setup(opts)
     local orgOnBuf = termOpts.win.on_buf
     termOpts.env.TERM_PROGRAM = 'vscode'
     if string.find(termOpts.cmd, 'qwen') then
+      if termOpts.cmd == 'qwen' and vim.fn.executable('qwen') == 0 then
+        termOpts = nil
+        goto continue
+      end
       termOpts.env.QWEN_CODE_IDE_WORKSPACE_PATH = vim.fn.getcwd()
       termOpts.env.QWEN_CODE_IDE_SERVER_PORT = tostring(termOpts.port)
     else
+      if termOpts.cmd == 'gemini' and vim.fn.executable('gemini') == 0 then
+        termOpts = nil
+        goto continue
+      end
       termOpts.env.GEMINI_CLI_IDE_WORKSPACE_PATH = vim.fn.getcwd()
       termOpts.env.GEMINI_CLI_IDE_SERVER_PORT = tostring(termOpts.port)
     end
@@ -257,7 +265,7 @@ function ideSidebar.setup(opts)
       if orgOnBuf and type(orgOnBuf) == 'function' then orgOnBuf(win) end
     end
     ::continue::
-    table.insert(ideSidebarState.terminalOpts, termOpts)
+    if termOpts then table.insert(ideSidebarState.terminalOpts, termOpts) end
   end
   log.debug(vim.inspect(ideSidebarState.terminalOpts))
   -------------------------------------------------------
