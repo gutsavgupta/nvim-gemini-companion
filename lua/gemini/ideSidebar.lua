@@ -267,6 +267,11 @@ function ideSidebar.setup(opts)
     ::continue::
     if termOpts then table.insert(ideSidebarState.terminalOpts, termOpts) end
   end
+  if #ideSidebarState.terminalOpts == 0 then
+    log.error('No valid terminals found for Gemini/Qwen')
+    error('No valid executable found for Gemini/Qwen')
+    return
+  end
   log.debug(vim.inspect(ideSidebarState.terminalOpts))
   -------------------------------------------------------
   --- Creating User Commands

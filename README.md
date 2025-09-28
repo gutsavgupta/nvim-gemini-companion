@@ -1,12 +1,12 @@
 # nvim-gemini-companion
 
-Gemini CLI companion now speaks Qwen! 🚀
+✨ Your Ultimate AI-Powered Neovim Sidekick! 🚀 Now with Dual AI Support! 🤖
 
-`nvim-gemini-companion` is a Neovim plugin that integrates the Gemini CLI + Qwen-Code for a streamlined development experience. It allows you to use the Gemini/Qwen CLI's features directly within Neovim, including diff views for suggested changes, a sidebar for managing the CLI agent, and automatic handling of file modifications. This plugin is designed for ease of use and can be customized to fit your workflow.
+`nvim-gemini-companion` is a turbocharged Neovim plugin that brings Gemini CLI + Qwen-Code directly into your editor! 💥 Get ready for diff views, AI agent management, and seamless file modifications — all while keeping your workflow blazing fast! ⚡ Enjoy up to 3000 Agentic requests per day (1000 from Gemini-cli + 2000 from Qwen-code) with their current subscription model! 📊
 
-![Floating Sidebar](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/gemini-20250926-floating.png)
+![Gemini](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/Gemini-20250928.png)
 -------
-![Right Fixed Sidebar](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/gemini-20250926-right-fixed.png)
+![Qwen](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/Qwen-20250928.png)
 -------
 
 ## Demo
@@ -14,21 +14,21 @@ https://github.com/user-attachments/assets/bcce8fce-78d8-4f5a-8945-365ce636adf7
 
 ## Features
 
-*   **Diff View:** Open a diff view to compare your local file with the content suggested by the Gemini CLI. You can accept or reject the changes, and the plugin will handle the file updates for you.
-*   **CLI Agent:** The plugin provides a sidebar that hosts the Gemini CLI, allowing you to interact with it in a dedicated terminal session.
-*   **Multi-Agent Support:** The plugin now supports both `gemini` and `qwen-code` CLI agents. You can run them simultaneously and switch between them seamlessly.
-*   **Tab-based Switching:** When multiple agents are configured, you can easily switch between their terminals by pressing the `<Tab>` key.
-*   **Context Management:** The plugin tracks your workspace state, including open files, cursor position, and selected text, and provides this context to the Gemini CLI.
-*   **LSP Diagnostics:** Send LSP diagnostics for the current file or line to the Gemini CLI for enhanced debugging.
-*   **Switchable Sidebar Style:** Switch between different sidebar styles (e.g., `right-fixed`, `floating`) to find the one that best suits your workflow.
-*   **Customizable:** The plugin is highly customizable, allowing you to configure the sidebar, the Gemini CLI command, and key bindings to your liking.
+*   ✅ **Diff View:** Compare your local file with AI suggestions and accept/reject changes seamlessly
+*   ✅ **CLI Agent:** Dedicated terminal session for interacting with AI agents
+*   ✅ **Multi-Agent Support:** Run both `gemini` and `qwen-code` agents simultaneously 
+*   ✅ **Tab-based Switching:** Effortlessly switch between AI terminals with `<Tab>`
+*   ✅ **Context Management:** Tracks open files, cursor position, and selections for AI context
+*   ✅ **LSP Diagnostics:** Send file/line diagnostics to AI agents for enhanced debugging
+*   ✅ **Switchable Sidebar:** Choose between `right-fixed`, `left-fixed`, `bottom-fixed`, or `floating` styles
+*   ✅ **Highly Customizable:** Configure commands, window styles, and key bindings to your liking
 
 ## Prerequisites
 
-This plugin requires the `gemini` and/or `qwen-code` to be installed and available in your system's PATH. If you need to use a different command or path for the CLIs, you can configure it using the `cmds` option in the plugin's setup.
+Install `gemini` and/or `qwen-code` CLIs to your system PATH for plugin functionality. 
 
-For installation instructions for the gemini-cli, please refer to the official GitHub page: [gemini-cli](https://github.com/google-gemini/gemini-cli)
-For qwen-code, please refer to: [qwen-code](https://github.com/qwen-team/qwen-code)
+*   [gemini-cli](https://github.com/google-gemini/gemini-cli) 
+*   [qwen-code](https://github.com/qwen-team/qwen-code)
 
 ## Installation
 
@@ -72,6 +72,7 @@ You can install the plugin using `lazy.nvim`:
 The following options are available in the `setup` function:
 
 *   `cmds`: A list of commands to run for the CLI agents. Defaults to `{ "gemini", "qwen" }`.
+    *   The plugin checks if the agent is installed in the system PATH and only enables it if found.
     *   If you want to use only one agent, you can set it as a single command string, e.g., `cmd = "gemini"`.
 *   `win`: This option configures the window for the Gemini sidebar. It respects the `snacks.win` options from the [`folke/snacks.nvim`](https://github.com/folke/snacks.nvim) library. For more information on the available options, please refer to the [snacks.win documentation](https://github.com/folke/snacks.nvim/blob/main/docs/win.md).
 

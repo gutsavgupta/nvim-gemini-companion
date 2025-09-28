@@ -111,7 +111,9 @@ describe('ideSidebar', function()
       ideSidebar.toggle()
       -- only qwen should be initialized
       assert.spy(skterminal_spy.get).was.called_with('qwen', match.is_table())
-      assert.spy(skterminal_spy.get).was.not_called_with('gemini', match.is_table())
+      assert
+        .spy(skterminal_spy.get).was
+        .not_called_with('gemini', match.is_table())
     end)
   end)
 
