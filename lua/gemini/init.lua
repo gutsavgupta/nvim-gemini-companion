@@ -160,8 +160,7 @@ local function handleMcpRequest(client, request)
   end
 end
 
----
--- Sets up the plugin. This should be called from the user's Neovim config.
+--- Sets up the plugin. This should be called from the user's Neovim config.
 -- @param opts table Configuration options for the plugin.
 --   - width (number): Width of the sidebar.
 --   - command (string): The command to run for the Gemini CLI.
@@ -193,7 +192,7 @@ function M.setup(opts)
     end)
   end)
 
-  -- 3. Setup sidebar
+  -- 3. Setup sidebar (this will check if binaries exist and warn if none found)
   ideSidebar.setup(opts)
 
   -- 4. Setup diff manager

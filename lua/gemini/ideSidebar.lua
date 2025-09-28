@@ -7,8 +7,49 @@ local log = require('plenary.log').new({
 })
 
 local ideSidebar = {}
-local snacksAvailable, skterminal = pcall(require, 'snacks.terminal')
+local ideSidebarState = {
+  lastActiveIdx = 1,
+  terminalOpts = {},
+  presets = {
+    ['right-fixed'] = {
+      position = 'right',
+      fixed = true,
+      border = 'rounded',
+      height = 1.0,
+      width = 0.35,
+      max_height = nil,
+      max_width = 120,
+    },
+    ['left-fixed'] = {
+      position = 'left',
+      fixed = true,
+      border = 'rounded',
+      height = 1.0,
+      width = 0.35,
+      max_height = nil,
+      max_width = 120,
+    },
+    ['bottom-fixed'] = {
+      position = 'bottom',
+      fixed = true,
+      border = 'rounded',
+      width = 1.0,
+      height = 0.35,
+      max_height = 100,
+      max_width = nil,
+    },
+    ['floating'] = {
+      position = 'float',
+      border = 'rounded',
+      height = 0.9,
+      width = 0.9,
+      max_height = nil,
+      max_width = nil,
+    },
+  },
+}
 
+local snacksAvailable, skterminal = pcall(require, 'snacks.terminal')
 if not snacksAvailable then
   vim.notify(
     'nvim-gemini-companion: snacks.nvim not found.'
@@ -19,101 +60,97 @@ if not snacksAvailable then
   return
 end
 
-local defaults = {
-  port = nil,
-  cmd = 'gemini',
-  env = {},
-  win = {},
-}
+--- Extends the default configuration with user-provided options.
+-- @param opts table A table of options to override the defaults.
+-- @return table The merged configuration table.
+function ideSidebar.extendDefaults(opts, defaults)
+  local configOpts = vim.tbl_deep_extend('force', defaults, opts or {})
 
-local presets = {
-  ['right-fixed'] = {
-    position = 'right',
-    fixed = true,
-    border = 'rounded',
-    height = 1.0,
-    width = 0.35,
-    max_height = nil,
-    max_width = 120,
-  },
-  ['left-fixed'] = {
-    position = 'left',
-    fixed = true,
-    border = 'rounded',
-    height = 1.0,
-    width = 0.35,
-    max_height = nil,
-    max_width = 120,
-  },
-  ['bottom-fixed'] = {
-    position = 'bottom',
-    fixed = true,
-    border = 'rounded',
-    width = 1.0,
-    height = 0.35,
-    max_height = 100,
-    max_width = nil,
-  },
-  ['floating'] = {
-    position = 'float',
-    border = 'rounded',
-    height = 0.9,
-    width = 0.9,
-    max_height = nil,
-    max_width = nil,
-  },
-}
+  -- Determine window style from preset and user overrides
+  local presetName = (configOpts.win and configOpts.win.preset) or 'right-fixed'
+  local presetOpts = ideSidebarState.presets[presetName]
+  if not presetOpts then
+    log.warn(
+      'Invalid sidebar style preset: '
+        .. presetName
+        .. ". Falling back to 'right-fixed'."
+    )
+    presetOpts = ideSidebarState.presets['right-fixed']
+  end
+  -- The user's win options override the preset
+  configOpts.win =
+    vim.tbl_deep_extend('force', presetOpts, configOpts.win or {})
+  return configOpts
+end
 
---- Toggles the Gemini sidebar terminal.
--- It will open the terminal if it's closed, or close it if it's open.
--- @param opts table Configuration options for the sidebar.
-function ideSidebar.toggle(opts) skterminal.toggle(opts.cmd, opts) end
+--- Toggles the sidebar terminal. if terminal is valid should hide it
+--- otherwise open the last active terminal
+function ideSidebar.toggle()
+  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+  local term, created = skterminal.get(opts.cmd, opts)
+  if created then return end
+  term:toggle()
+end
 
---- Closes the Gemini sidebar terminal.
--- @param opts table Configuration options for the sidebar.
-function ideSidebar.close(opts)
-  local terminal = skterminal.get(opts.cmd, opts)
-  if not terminal then return end
-  if terminal.augroup then
+-- Switch the sidebar terminal to next command, hide the current one
+-- and open the next one
+function ideSidebar.switch()
+  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+  local term, created = skterminal.get(opts.cmd, opts)
+  if created then return end
+  term:hide()
+  ideSidebarState.lastActiveIdx = (
+    ideSidebarState.lastActiveIdx % #ideSidebarState.terminalOpts
+  ) + 1
+  local nextOpts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+  local nextTerm = skterminal.get(nextOpts.cmd, nextOpts)
+  nextTerm:show()
+  nextTerm:focus()
+end
+
+-- Close the sidebar terminal
+function ideSidebar.close()
+  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+  local term =
+    skterminal.get(opts.cmd, vim.tbl_extend('force', opts, { create = false }))
+  if not term then return end
+  if term.augroup then
     vim.api.nvim_clear_autocmds({
-      group = terminal.augroup,
+      group = term.augroup,
       event = 'TermClose',
     })
   end
-  terminal:on('TermClose', function() terminal:close({ buf = true }) end)
-  local channel = vim.api.nvim_buf_get_var(terminal.buf, 'terminal_job_id')
+  term:on('TermClose', function() term:close({ buf = true }) end)
+  local channel = vim.api.nvim_buf_get_var(term.buf, 'terminal_job_id')
   if channel then vim.fn.jobstop(channel) end
 end
 
---- Sends text to the Gemini sidebar terminal.
+--- Sends text to the sidebar last active terminal.
 -- The text is bracketed to ensure it's treated as a single block.
 -- @param opts table Configuration options for the sidebar.
 -- @param text string The text to send to the terminal.
-function ideSidebar.sendText(opts, text)
-  local terminal = skterminal.get(opts.cmd, opts)
-  if not terminal or not terminal:buf_valid() then
+function ideSidebar.sendText(text)
+  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+  local term =
+    skterminal.get(opts.cmd, vim.tbl_extend('force', opts, { create = false }))
+  if not term or not term:buf_valid() then
     log.debug('Terminal not found or not valid')
     return
   end
-  terminal:show()
-  terminal:focus()
-  local channel = vim.api.nvim_buf_get_var(terminal.buf, 'terminal_job_id')
-  if not channel then
-    log.debug('Terminal channel not found')
-    return
-  end
+  local channel = vim.api.nvim_buf_get_var(term.buf, 'terminal_job_id')
   local bracketStart = '\27[200~'
   local bracketEnd = '\27[201~\r'
   local bracketedText = bracketStart .. text .. bracketEnd
   vim.api.nvim_chan_send(channel, bracketedText)
+
+  term:show()
+  term:focus()
 end
 
---- Sends LSP diagnostics for a buffer to the Gemini sidebar.
--- @param opts table Configuration options for the sidebar.
+--- Sends LSP diagnostics for a buffer to the sidebar.
 -- @param bufnr number The buffer number to get diagnostics from.
 -- @param linenumber number (optional) The line number to filter diagnostics by.
-function ideSidebar.sendDiagnostic(opts, bufnr, linenumber)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
+function ideSidebar.sendDiagnostic(bufnr, linenumber)
   local diagnostics = vim.diagnostic.get(bufnr)
 
   if not diagnostics or #diagnostics == 0 then
@@ -152,122 +189,155 @@ function ideSidebar.sendDiagnostic(opts, bufnr, linenumber)
   }
 
   local diagnosticString = vim.fn.json_encode(diagnosticData)
-  ideSidebar.sendText(opts, diagnosticString)
+  ideSidebar.sendText(diagnosticString)
 end
 
 --- Sets the style of the sidebar window.
 -- @param opts table Configuration options for the sidebar.
 -- @param presetName string The name of the preset style to apply.
-function ideSidebar.setStyle(opts, presetName)
-  local preset = presets[presetName]
+function ideSidebar.setStyle(presetName)
+  local preset = ideSidebarState.presets[presetName]
   if not preset then
     log.warn('Invalid sidebar style preset: ' .. presetName)
     return
   end
 
-  -- If the terminal is open, close and reopen it to apply the new style
-  local terminal = skterminal.get(opts.cmd, opts)
-  if terminal and terminal:buf_valid() then
-    terminal:hide()
-    terminal.opts = vim.tbl_deep_extend('force', terminal.opts, preset)
-    vim.defer_fn(function() ideSidebar.toggle(opts) end, 100) -- Defer to allow the terminal to close properly
+  for _, opts in ipairs(ideSidebarState.terminalOpts) do
+    opts = vim.tbl_deep_extend('force', opts, preset)
+    local term, created = skterminal.get(opts.cmd, opts)
+    if not created and term and term:buf_valid() then
+      term:hide()
+      term.opts = vim.tbl_deep_extend('force', term.opts, preset)
+    end
   end
-end
 
---- Extends the default configuration with user-provided options.
--- @param opts table A table of options to override the defaults.
--- @return table The merged configuration table.
-local function extendDefaults(opts)
-  local configOpts = vim.tbl_deep_extend('force', defaults, opts or {})
-
-  -- Determine window style from preset and user overrides
-  local presetName = (configOpts.win and configOpts.win.preset) or 'right-fixed'
-  local presetOpts = presets[presetName]
-  if not presetOpts then
-    log.warn(
-      'Invalid sidebar style preset: '
-        .. presetName
-        .. ". Falling back to 'right-fixed'."
-    )
-    presetOpts = presets['right-fixed']
-  end
-  -- The user's win options override the preset
-  configOpts.win =
-    vim.tbl_deep_extend('force', presetOpts, configOpts.win or {})
-  return configOpts
+  vim.defer_fn(ideSidebar.toggle, 100)
 end
 
 --- Sets up the Gemini sidebar, creating user commands.
 -- @param opts table Configuration options for the sidebar.
 function ideSidebar.setup(opts)
-  local lastSidebarStyleIdx = 1
-  local configOpts = extendDefaults(opts)
-  configOpts.env.TERM_PROGRAM = 'vscode'
-  configOpts.env.GEMINI_CLI_IDE_WORKSPACE_PATH = vim.fn.getcwd()
-  configOpts.env.GEMINI_CLI_IDE_SERVER_PORT = configOpts.port
+  -------------------------------------------------------
+  --- Setup Defaults
+  -------------------------------------------------------
+  local defaults = {
+    cmds = { 'gemini', 'qwen' },
+    port = nil,
+    env = {},
+    win = {
+      preset = 'right-fixed',
+    },
+  }
 
+  -------------------------------------------------------
+  --- Creating Opts for Each Terminal
+  -------------------------------------------------------
+  opts = ideSidebar.extendDefaults(opts, defaults)
+  if opts.cmd then opts.cmds = { opts.cmd } end
+  for _, cmd in ipairs(opts.cmds) do
+    local termOpts = vim.tbl_deep_extend('force', opts, { cmd = cmd })
+    local orgOnBuf = termOpts.win.on_buf
+    termOpts.env.TERM_PROGRAM = 'vscode'
+    if string.find(termOpts.cmd, 'qwen') then
+      if termOpts.cmd == 'qwen' and vim.fn.executable('qwen') == 0 then
+        termOpts = nil
+        goto continue
+      end
+      termOpts.env.QWEN_CODE_IDE_WORKSPACE_PATH = vim.fn.getcwd()
+      termOpts.env.QWEN_CODE_IDE_SERVER_PORT = tostring(termOpts.port)
+    else
+      if termOpts.cmd == 'gemini' and vim.fn.executable('gemini') == 0 then
+        termOpts = nil
+        goto continue
+      end
+      termOpts.env.GEMINI_CLI_IDE_WORKSPACE_PATH = vim.fn.getcwd()
+      termOpts.env.GEMINI_CLI_IDE_SERVER_PORT = tostring(termOpts.port)
+    end
+    if #opts.cmds <= 1 then goto continue end
+    termOpts.win.on_buf = function(win)
+      vim.api.nvim_buf_set_keymap(
+        win.buf,
+        't',
+        '<Tab>',
+        '<Cmd>lua require("gemini.ideSidebar").switch()<CR>', -- Corrected escaping for nested quotes
+        { noremap = true, silent = true }
+      )
+      if orgOnBuf and type(orgOnBuf) == 'function' then orgOnBuf(win) end
+    end
+    ::continue::
+    if termOpts then table.insert(ideSidebarState.terminalOpts, termOpts) end
+  end
+  if #ideSidebarState.terminalOpts == 0 then
+    log.error('No valid terminals found for Gemini/Qwen')
+    error('No valid executable found for Gemini/Qwen')
+    return
+  end
+  log.debug(vim.inspect(ideSidebarState.terminalOpts))
+  -------------------------------------------------------
+  --- Creating User Commands
+  -------------------------------------------------------
   vim.api.nvim_create_user_command(
     'GeminiToggle',
-    function() ideSidebar.toggle(configOpts) end,
-    {
-      desc = 'Toggle Gemini sidebar',
-    }
+    function() ideSidebar.toggle() end,
+    { desc = 'Toggle Gemini/Qwen sidebar' }
   )
-  vim.api.nvim_create_user_command(
-    'GeminiClose',
-    function() ideSidebar.close(configOpts) end,
-    {
-      desc = 'Close Gemini sidebar',
-    }
-  )
+
+  local lastPresetIdx = 1
+  vim.api.nvim_create_user_command('GeminiSwitchSidebarStyle', function(cmdOpts)
+    local presetName = cmdOpts.fargs[1]
+    local presetKeys = vim.tbl_keys(ideSidebarState.presets)
+    if not presetName then
+      presetName = presetKeys[lastPresetIdx]
+      lastPresetIdx = (lastPresetIdx % #presetKeys) + 1
+    else
+      if not ideSidebarState.presets[presetName] then
+        log.warn('Invalid sidebar style preset: ' .. presetName)
+        return
+      end
+      for i, key in ipairs(presetKeys) do
+        if key == presetName then
+          lastPresetIdx = i
+          break
+        end
+      end
+    end
+    ideSidebar.setStyle(presetName)
+  end, {
+    nargs = '?',
+    desc = 'Switch the style of the Gemini/Qwen sidebar. Presets:'
+      .. vim.inspect(ideSidebarState.presets),
+    complete = function() return vim.tbl_keys(ideSidebarState.presets) end,
+  })
+
   vim.api.nvim_create_user_command(
     'GeminiSend',
-    function(opts) ideSidebar.sendText(configOpts, opts.args) end,
+    function(cmdOpts) ideSidebar.sendText(cmdOpts.args) end,
     {
       nargs = '*',
-      desc = 'Send text to Gemini sidebar',
+      desc = 'Send text to active sidebar',
     }
   )
+
   vim.api.nvim_create_user_command('GeminiSendFileDiagnostic', function()
     local bufnr = vim.api.nvim_get_current_buf()
-    ideSidebar.sendDiagnostic(configOpts, bufnr, nil)
+    ideSidebar.sendDiagnostic(bufnr, nil)
   end, {
-    desc = 'Send file diagnostics to Gemini sidebar',
+    desc = 'Send file diagnostics to active sidebar',
   })
+
   vim.api.nvim_create_user_command('GeminiSendLineDiagnostic', function()
     local bufnr = vim.api.nvim_get_current_buf()
     local linenr = vim.api.nvim_win_get_cursor(0)[1]
-    ideSidebar.sendDiagnostic(configOpts, bufnr, linenr)
+    ideSidebar.sendDiagnostic(bufnr, linenr)
   end, {
-    desc = 'Send line diagnostics to Gemini sidebar',
+    desc = 'Send line diagnostics to active sidebar',
   })
+
   vim.api.nvim_create_user_command(
-    'GeminiSwitchSidebarStyle',
-    function(cmd_opts)
-      local presetName = cmd_opts.fargs[1]
-      local presetKeys = vim.tbl_keys(presets)
-      if not presetName then
-        presetName = presetKeys[lastSidebarStyleIdx]
-        lastSidebarStyleIdx = (lastSidebarStyleIdx % #presetKeys) + 1
-      else
-        if not presets[presetName] then
-          log.warn('Invalid sidebar style preset: ' .. presetName)
-          return
-        end
-        for i, key in ipairs(presetKeys) do
-          if key == presetName then
-            lastSidebarStyleIdx = i
-            break
-          end
-        end
-      end
-      ideSidebar.setStyle(configOpts, presetName)
-    end,
+    'GeminiClose',
+    function() ideSidebar.close() end,
     {
-      nargs = '?',
-      desc = 'Switch the style of the Gemini sidebar. Presets:'
-        .. vim.inspect(presets),
-      complete = function() return vim.tbl_keys(presets) end,
+      desc = 'Close Gemini sidebar',
     }
   )
 end
