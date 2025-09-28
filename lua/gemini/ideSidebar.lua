@@ -3,7 +3,7 @@
 
 local log = require('plenary.log').new({
   plugin = 'nvim-gemini-companion',
-  level = os.getenv('NGC_LOG_LEVEL') or 'debug',
+  level = os.getenv('NGC_LOG_LEVEL') or 'warn',
 })
 
 local ideSidebar = {}
@@ -151,7 +151,6 @@ end
 -- @param bufnr number The buffer number to get diagnostics from.
 -- @param linenumber number (optional) The line number to filter diagnostics by.
 function ideSidebar.sendDiagnostic(bufnr, linenumber)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
   local diagnostics = vim.diagnostic.get(bufnr)
 
   if not diagnostics or #diagnostics == 0 then
@@ -331,4 +330,3 @@ function ideSidebar.setup(opts)
 end
 
 return ideSidebar
-
