@@ -2,7 +2,7 @@
 
 ✨ Your Ultimate AI-Powered Neovim Sidekick! 🚀 Now with Dual AI Support! 🤖
 
-`nvim-gemini-companion` is a turbocharged Neovim plugin that brings Gemini CLI + Qwen-Code directly into your editor! 💥 Get ready for diff views, AI agent management, and seamless file modifications — all while keeping your workflow blazing fast! ⚡ Enjoy up to 3000 Agentic requests per day (1000 from Gemini-cli + 2000 from Qwen-code) with their current subscription model! 📊
+`nvim-gemini-companion` is a turbocharged Neovim plugin that brings Gemini CLI + Qwen-Code directly into your editor! 💥 Get ready for diff views, AI agent management, and seamless file modifications — all while keeping your workflow blazing fast! ⚡ Enjoy up to 3000 Agentic requests per day (1000 from Gemini-cli + 2000 from Qwen-code) with their free subscription model! 📊
 
 ![Gemini](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/Gemini-20250928.png)
 -------
