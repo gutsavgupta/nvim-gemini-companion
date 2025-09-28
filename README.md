@@ -10,7 +10,7 @@
 -------
 
 ## Demo
-https://github.com/user-attachments/assets/bcce8fce-78d8-4f5a-8945-365ce636adf7
+https://github.com/user-attachments/assets/48324de2-1c7c-4a00-966a-23836aecd29e
 
 ## Features
 
@@ -28,7 +28,7 @@ https://github.com/user-attachments/assets/bcce8fce-78d8-4f5a-8945-365ce636adf7
 Install `gemini` and/or `qwen-code` CLIs to your system PATH for plugin functionality. 
 
 *   [gemini-cli](https://github.com/google-gemini/gemini-cli) 
-*   [qwen-code](https://github.com/qwen-team/qwen-code)
+*   [qwen-code](https://github.com/QwenLM/qwen-code)
 
 ## Installation
 
