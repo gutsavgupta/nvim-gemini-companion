@@ -12,8 +12,8 @@ describe('ideDiffManager', function()
     vim.cmd('silent! tabonly')
 
     -- Reset the module to clear the 'views' table
-    package.loaded.ideDiffManager = nil
-    diffManager = require('ideDiffManager')
+    package.loaded['gemini.ideDiffManager'] = nil
+    diffManager = require('gemini.ideDiffManager')
 
     -- Mock vim.schedule to run functions immediately for testing
     _G.originalVimSchedule = vim.schedule
@@ -90,7 +90,6 @@ describe('ideDiffManager', function()
     local tempFile = vim.fn.tempname()
     vim.fn.writefile({ 'line 1' }, tempFile)
     local newContent = 'line 1 changed'
-
     local onCloseSpy = spy.new(function() end)
     diffManager.open(tempFile, newContent, onCloseSpy)
 
