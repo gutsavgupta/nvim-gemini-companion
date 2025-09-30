@@ -128,11 +128,7 @@ function IdeMcpServer:close()
   self.server:close()
 end
 
---- Stops the TCP server and closes all active client connections.
---- This is an alias for the `close` method, providing a more intuitive name for shutting down the server.
-function IdeMcpServer:stop()
-  self:close()
-end
+
 
 -------------------------------------------------------------------------------
 -- Public Methods (IdeMcpClient)

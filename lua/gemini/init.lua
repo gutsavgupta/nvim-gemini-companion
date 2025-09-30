@@ -202,9 +202,7 @@ function M.setup(opts)
   vim.api.nvim_create_autocmd('VimLeave', {
     pattern = '*',
     callback = function()
-      log.info('Stopping MCP server')
-      if not server.stop then log.info('Calling wrong method') end
-      server:stop()
+      if server then server:close() end
     end,
   })
 
