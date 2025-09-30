@@ -120,16 +120,16 @@ local function handleToolCall(client, request)
             filePath = toolParams.filePath,
             content = finalContent,
           })
-        else
-          sendMcpNotification('ide/diffClosed', {
+        elseif status == 'rejected' then
+          sendMcpNotification('ide/diffRejected', {
             filePath = toolParams.filePath,
-            content = finalContent,
           })
         end
       end
     )
   elseif toolName == 'closeDiff' then
-    ideDiffManager.close(toolParams.filePath)
+    local finalContent = ideDiffManager.close(toolParams.filePath)
+    responseTbl.result.content[1].text = finalContent
   else
     log.warn('Unhandled tool call:', toolName)
     if client then client:close() end
@@ -164,7 +164,7 @@ end
 -- @param opts table Configuration options for the plugin.
 --   - width (number): Width of the sidebar.
 --   - command (string): The command to run for the Gemini CLI.
-function M.setup(opts)
+function M.setup(opts) 
   opts = opts or {}
   log.info('Setting up nvim-gemini-companion with options:', opts)
   load_modules()

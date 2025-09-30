@@ -89,8 +89,7 @@ function manager.open(filePath, newContent, onClose)
   end)
 end
 
-local function closeView(filePath, status)
-  status = status or 'closed'
+local function closeView(filePath)
   local view = views[filePath]
   if not view then return end
 
@@ -107,28 +106,40 @@ local function closeView(filePath, status)
   end
 
   views[filePath] = nil
-  if view.onClose then view.onClose(content, status) end
+  return content
 end
 
 ---
 ---
 -- Closes the diff view for a given file path.
 -- @param filePath string The file path of the diff to close.
-function manager.close(filePath) closeView(filePath, 'closed') end
+function manager.close(filePath) return closeView(filePath) end
 
 ---
 ---
 -- Accepts the changes in the diff view.
 -- This closes the view and triggers the onClose callback with "accepted" status.
 -- @param filePath string The file path of the diff to accept.
-function manager.accept(filePath) closeView(filePath, 'accepted') end
+function manager.accept(filePath)
+  local view = views[filePath]
+  local content = closeView(filePath)
+  if content and view and view.onClose then
+    view.onClose(content, 'accepted')
+  end
+end
 
 ---
 ---
 -- Rejects the changes in the diff view.
 -- This closes the view and triggers the onClose callback with "rejected" status.
 -- @param filePath string The file path of the diff to reject.
-function manager.reject(filePath) closeView(filePath, 'rejected') end
+function manager.reject(filePath)
+  local view = views[filePath]
+  local content = closeView(filePath)
+  if content and view and view.onClose then
+    view.onClose(content, 'rejected')
+  end
+end
 
 ---
 ---
