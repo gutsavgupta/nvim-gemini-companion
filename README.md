@@ -2,7 +2,7 @@
 
 🚀 Now with Dual Agent Support (++Qwen-Code)! 🤖
 
-`nvim-gemini-companion` brings Gemini CLI + Qwen-Code directly into Neovim! 🚀 Enjoy diff views, agent management, and smart file modifications while keeping your workflow blazing fast. 🌟 enjoy 3000 free daily requests (1000 from Gemini + 2000 from Qwen) with their subscription-free model - no middleware needed!
+`nvim-gemini-companion` brings Gemini CLI + Qwen-Code directly into Neovim! 🚀 Enjoy diff views, agent management, and smart file modifications while keeping your workflow blazing fast. 🌟 Get 3000 free daily requests (1000 from Gemini + 2000 from Qwen) with their subscription-free model - no middleware needed!
 
 ![Gemini](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/Gemini-20250928.png)
 -------
@@ -20,6 +20,7 @@ https://github.com/user-attachments/assets/48324de2-1c7c-4a00-966a-23836aecd29e
 *   ✅ **Tab-based Switching:** Effortlessly switch between AI terminals with `<Tab>`
 *   ✅ **Context Management:** Tracks open files, cursor position, and selections for AI context
 *   ✅ **LSP Diagnostics:** Send file/line diagnostics to AI agents for enhanced debugging
+*   ✅ **Send Selection:** Send selected text + prompt directly to AI agents using `:GeminiSend` command
 *   ✅ **Switchable Sidebar:** Choose between `right-fixed`, `left-fixed`, `bottom-fixed`, or `floating` styles
 *   ✅ **Highly Customizable:** Configure commands, window styles, and key bindings to your liking
 

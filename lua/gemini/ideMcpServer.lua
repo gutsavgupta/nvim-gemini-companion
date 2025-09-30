@@ -13,10 +13,10 @@ IdeMcpServer.__index = IdeMcpServer
 -- Utility Functions
 -------------------------------------------------------------------------------
 --- Decodes an HTTP request from a buffer.
---- It parses the HTTP headers and body.
+--- It parses the HTTP headers and body, checking that content-length matches body size.
 --- @param buffer string The input buffer containing the HTTP request.
 --- @return table|nil headers A table of HTTP headers, or nil if parsing is incomplete.
---- @return string|nil body The HTTP request body, or nil if parsing is incomplete.
+--- @return string|nil body The HTTP request body, or nil if parsing is incomplete or content-length doesn't match.
 --- @return string remainingBuffer The remaining unparsed portion of the buffer.
 local function httpDecoder(buffer)
   local headerEnd = buffer:find('\r\n\r\n')
@@ -49,10 +49,11 @@ end
 -- Public Methods (IdeMcpServer)
 -------------------------------------------------------------------------------
 --- Creates a new IdeMcpServer instance.
+--- Initializes a TCP server with callbacks for handling client requests and connections.
 --- @param callbacks table A table of callback functions.
 ---   - onClientRequest: function(client, request) - Called when a client sends a request.
----   - onClientClose: function() - Called when a client connection is closed.
---- @return table self The new IdeMcpServer instance.
+---   - onClientClose: function(client) - Called when a client connection is closed, receives client as parameter.
+--- @return table self The new IdeMcpServer instance with initialized TCP server and client tracking.
 function IdeMcpServer.new(callbacks)
   local self = setmetatable({}, IdeMcpServer)
   self.server = vim.uv.new_tcp()
@@ -65,8 +66,9 @@ function IdeMcpServer.new(callbacks)
 end
 
 --- Starts the TCP server and begins listening for connections.
+--- Accepts incoming client connections and creates IdeMcpClient instances for them.
 --- @param port number The port to listen on. If 0, a random available port is used.
---- @return number The port the server is listening on.
+--- @return number The port the server is listening on, useful when port 0 is provided.
 function IdeMcpServer:start(port)
   self.server:bind('127.0.0.1', port)
   self.server:listen(64, function(err)
@@ -94,8 +96,9 @@ function IdeMcpServer:start(port)
 end
 
 --- Broadcasts a message to all connected streaming clients.
---- A streaming client is one that has established a connection via a GET request.
---- @param tlbMsg table The message table to be sent (will be JSON encoded).
+--- A streaming client is one that has established a connection via a GET request and has isMcpStream set to true.
+--- This is typically used for server-sent events to keep the connection alive and push updates to clients.
+--- @param tlbMsg table The message table to be sent (will be JSON encoded and formatted as a server-sent event).
 function IdeMcpServer:BroadcastToStreams(tlbMsg)
   for _, client in pairs(self.clientsObj) do
     if client.isMcpStream then client:send(tlbMsg) end
@@ -103,7 +106,9 @@ function IdeMcpServer:BroadcastToStreams(tlbMsg)
 end
 
 --- Sends a message to the most recently connected streaming client.
---- @param tlbMsg table The message table to be sent (will be JSON encoded).
+--- Iterates through the clients table and finds the last client where isMcpStream is true,
+--- as each new client overwrites the previous client with the same ID in the clientsObj dictionary.
+--- @param tlbMsg table The message table to be sent (will be JSON encoded and formatted as a server-sent event).
 function IdeMcpServer:SendToLastStream(tlbMsg)
   local lastClient = nil
   for _, client in pairs(self.clientsObj) do
@@ -113,6 +118,8 @@ function IdeMcpServer:SendToLastStream(tlbMsg)
 end
 
 --- Closes the server and all active client connections.
+--- Iterates through all clients in the clientsObj table to close them individually,
+--- then closes the main server TCP handle to stop accepting new connections.
 function IdeMcpServer:close()
   log.info('ideMcpServer: closing server')
   for _, client in pairs(self.clientsObj) do
@@ -126,12 +133,14 @@ end
 -------------------------------------------------------------------------------
 --- Creates a new IdeMcpClient instance.
 --- This is typically called by the IdeMcpServer when a new client connects.
+--- Sets up the initial state for handling client communication, including initializing
+--- buffers and timers, and starts reading from the TCP connection.
 --- @param clientId number The unique identifier for the client.
 --- @param onClientRequest function The callback to execute when a request is received from this client.
 --- @param onClientClose function The callback to execute when this client's connection is closed.
 --- @param tcpClient userdata The underlying TCP client object from libuv.
 --- @param server table The parent IdeMcpServer instance.
---- @return table self The new IdeMcpClient instance.
+--- @return table self The new IdeMcpClient instance with initialized state and started reading.
 function IdeMcpClient.new(
   clientId,
   onClientRequest,
@@ -158,7 +167,9 @@ function IdeMcpClient.new(
 end
 
 --- Starts reading data from the client's TCP connection.
---- It sets up a callback to process incoming data chunks.
+--- Sets up a callback to process incoming data chunks, updating the last read time,
+--- handling errors and disconnections, and appending received data to the internal buffer.
+--- Schedules the parsing of data after receiving each chunk to handle HTTP requests.
 function IdeMcpClient:read()
   log.debug(string.format('ideMcpClient(c-%d): read started', self.clientId))
   self.tcpClient:read_start(function(err, data)
@@ -192,8 +203,9 @@ function IdeMcpClient:read()
 end
 
 --- Sends a message to the client.
---- The message is JSON-encoded and formatted as a Server-Sent Event.
---- @param mcpTbl table The message table to be sent.
+--- The message is JSON-encoded and formatted as a Server-Sent Event with the 'data:' prefix.
+--- Updates the last write time and logs the sent message for debugging purposes.
+--- @param mcpTbl table The message table to be sent. Will be JSON encoded and formatted as a server-sent event.
 function IdeMcpClient:send(mcpTbl)
   local success, encoded = pcall(vim.fn.json_encode, mcpTbl)
   if not success then
@@ -215,7 +227,9 @@ function IdeMcpClient:send(mcpTbl)
 end
 
 --- Closes the client connection.
---- It stops any timers, closes the TCP handle, and cleans up resources.
+--- Stops any active keep-alive timers, closes the TCP handle, and cleans up resources by
+--- removing the client from the server's clientsObj table and clearing references to
+--- callbacks and handles. This prevents memory leaks and ensures proper cleanup.
 function IdeMcpClient:close()
   if not self.tcpClient then return end
   log.debug(string.format('ideMcpClient(c-%d): closing client', self.clientId))
@@ -232,7 +246,8 @@ end
 -- Internal methods
 -------------------------------------------------------------------------------
 --- Internal helper to orchestrate parsing of the incoming data buffer.
---- It decides whether to parse a new HTTP message or handle subsequent data.
+--- It checks if a request has already been processed (to prevent multiple requests per connection)
+--- and either parses a new HTTP message or closes the connection if another request is received.
 --- @see IdeMcpClient:_parseHttpMsg
 function IdeMcpClient:_parseData()
   if not self.requestProcessed then
@@ -249,8 +264,12 @@ function IdeMcpClient:_parseData()
 end
 
 --- Internal helper to parse the HTTP message from the buffer.
---- It handles GET requests by establishing a streaming connection and POST requests
---- by processing the incoming message.
+--- Handles GET requests by establishing a streaming connection with keep-alive,
+--- and POST requests by processing the incoming JSON message.
+--- Validates the URL is '/mcp' and the method is GET or POST.
+--- For POST requests, it JSON-decodes the body and calls the onClientRequest callback,
+--- then closes the connection after a short delay.
+--- For GET requests, it establishes a streaming connection with keep-alive timer.
 function IdeMcpClient:_parseHttpMsg()
   local header, msgBody, remainingBuffer = httpDecoder(self.buffer)
   self.buffer = remainingBuffer

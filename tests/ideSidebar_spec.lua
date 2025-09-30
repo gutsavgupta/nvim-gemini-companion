@@ -7,8 +7,8 @@ local spy = require('luassert.spy')
 
 describe('ideSidebar', function()
   local ideSidebar
-  local skterminal_spy
-  local term_spy
+  local terminalSpy
+  local windowSpy
 
   before_each(function()
     -- Reset the module to clear the state
@@ -16,7 +16,7 @@ describe('ideSidebar', function()
     package.loaded['snacks.terminal'] = nil
 
     -- Mock snacks.terminal
-    term_spy = {
+    windowSpy = {
       toggle = spy.new(function() end),
       hide = spy.new(function() end),
       show = spy.new(function() end),
@@ -28,10 +28,10 @@ describe('ideSidebar', function()
       opts = {},
     }
 
-    skterminal_spy = {
-      get = spy.new(function() return term_spy, false end),
+    terminalSpy = {
+      get = spy.new(function() return windowSpy, false end),
     }
-    package.loaded['snacks.terminal'] = skterminal_spy
+    package.loaded['snacks.terminal'] = terminalSpy
 
     vim.fn.executable = spy.new(function() return 1 end)
     vim.api.nvim_buf_get_var = spy.new(function() return 123 end)
@@ -57,11 +57,13 @@ describe('ideSidebar', function()
       assert
         .spy(vim.api.nvim_create_user_command).was
         .called_with('GeminiClose', match.is_function(), { desc = 'Close Gemini sidebar' })
-      assert.spy(vim.api.nvim_create_user_command).was.called_with(
-        'GeminiSend',
-        match.is_function(),
-        { nargs = '*', desc = 'Send text to active sidebar' }
-      )
+      assert
+        .spy(vim.api.nvim_create_user_command).was
+        .called_with('GeminiSend', match.is_function(), {
+          nargs = '*',
+          range = true,
+          desc = 'Send selected text (with provided text) to active sidebar',
+        })
       assert.spy(vim.api.nvim_create_user_command).was.called_with(
         'GeminiSendFileDiagnostic',
         match.is_function(),
@@ -79,17 +81,17 @@ describe('ideSidebar', function()
 
     it('should set up terminal opts for multiple cmds', function()
       ideSidebar.setup({ cmds = { 'gemini', 'qwen' }, port = 12345 })
-      local get_calls = skterminal_spy.get.calls
-      assert.are.equal(#get_calls, 0) -- setup doesn't call get
+      local getCalls = terminalSpy.get.calls
+      assert.are.equal(#getCalls, 0) -- setup doesn't call get
 
       ideSidebar.toggle()
-      assert.spy(skterminal_spy.get).was.called_with('gemini', match.is_table())
+      assert.spy(terminalSpy.get).was.called_with('gemini', match.is_table())
     end)
 
     it('should set GEMINI environment variables', function()
       ideSidebar.setup({ cmd = 'gemini', port = 12345 })
       ideSidebar.toggle()
-      local opts = skterminal_spy.get.calls[1].vals[2]
+      local opts = terminalSpy.get.calls[1].vals[2]
       assert.equal(opts.env.GEMINI_CLI_IDE_WORKSPACE_PATH, '/fake/dir')
       assert.equal(opts.env.GEMINI_CLI_IDE_SERVER_PORT, '12345')
     end)
@@ -97,7 +99,7 @@ describe('ideSidebar', function()
     it('should set QWEN environment variables', function()
       ideSidebar.setup({ cmd = 'qwen', port = 12345 })
       ideSidebar.toggle()
-      local opts = skterminal_spy.get.calls[1].vals[2]
+      local opts = terminalSpy.get.calls[1].vals[2]
       assert.equal(opts.env.QWEN_CODE_IDE_WORKSPACE_PATH, '/fake/dir')
       assert.equal(opts.env.QWEN_CODE_IDE_SERVER_PORT, '12345')
     end)
@@ -110,9 +112,9 @@ describe('ideSidebar', function()
       ideSidebar.setup({ cmds = { 'gemini', 'qwen' } })
       ideSidebar.toggle()
       -- only qwen should be initialized
-      assert.spy(skterminal_spy.get).was.called_with('qwen', match.is_table())
+      assert.spy(terminalSpy.get).was.called_with('qwen', match.is_table())
       assert
-        .spy(skterminal_spy.get).was
+        .spy(terminalSpy.get).was
         .not_called_with('gemini', match.is_table())
     end)
   end)
@@ -121,16 +123,16 @@ describe('ideSidebar', function()
     it('should toggle the terminal', function()
       ideSidebar.setup({ cmd = 'gemini' })
       ideSidebar.toggle()
-      assert.spy(skterminal_spy.get).was.called_with('gemini', match.is_table())
-      assert.spy(term_spy.toggle).was.called(1)
+      assert.spy(terminalSpy.get).was.called_with('gemini', match.is_table())
+      assert.spy(windowSpy.toggle).was.called(1)
     end)
 
     it('should not toggle if terminal is newly created', function()
-      skterminal_spy.get = spy.new(function() return term_spy, true end)
+      terminalSpy.get = spy.new(function() return windowSpy, true end)
       ideSidebar.setup({ cmd = 'gemini' })
       ideSidebar.toggle()
-      assert.spy(skterminal_spy.get).was.called_with('gemini', match.is_table())
-      assert.spy(term_spy.toggle).was.not_called()
+      assert.spy(terminalSpy.get).was.called_with('gemini', match.is_table())
+      assert.spy(windowSpy.toggle).was.not_called()
     end)
   end)
 
@@ -140,19 +142,19 @@ describe('ideSidebar', function()
 
       -- First switch
       ideSidebar.switch()
-      assert.spy(skterminal_spy.get).was.called_with('gemini', match.is_table())
-      assert.spy(term_spy.hide).was.called(1)
-      assert.spy(skterminal_spy.get).was.called_with('qwen', match.is_table())
-      assert.spy(term_spy.show).was.called(1)
-      assert.spy(term_spy.focus).was.called(1)
+      assert.spy(terminalSpy.get).was.called_with('gemini', match.is_table())
+      assert.spy(windowSpy.hide).was.called(1)
+      assert.spy(terminalSpy.get).was.called_with('qwen', match.is_table())
+      assert.spy(windowSpy.show).was.called(1)
+      assert.spy(windowSpy.focus).was.called(1)
 
       -- Second switch (wraps around)
       ideSidebar.switch()
-      assert.spy(skterminal_spy.get).was.called_with('gemini', match.is_table())
-      assert.spy(term_spy.hide).was.called(2)
-      assert.spy(skterminal_spy.get).was.called_with('gemini', match.is_table())
-      assert.spy(term_spy.show).was.called(2)
-      assert.spy(term_spy.focus).was.called(2)
+      assert.spy(terminalSpy.get).was.called_with('gemini', match.is_table())
+      assert.spy(windowSpy.hide).was.called(2)
+      assert.spy(terminalSpy.get).was.called_with('gemini', match.is_table())
+      assert.spy(windowSpy.show).was.called(2)
+      assert.spy(windowSpy.focus).was.called(2)
     end)
   end)
 
@@ -160,9 +162,9 @@ describe('ideSidebar', function()
     it('should close the terminal', function()
       ideSidebar.setup({ cmd = 'gemini' })
       ideSidebar.close()
-      assert.spy(skterminal_spy.get).was.called_with('gemini', match.is_table())
+      assert.spy(terminalSpy.get).was.called_with('gemini', match.is_table())
       assert.spy(vim.fn.jobstop).was.called_with(123)
-      assert.spy(term_spy.on).was.called()
+      assert.spy(windowSpy.on).was.called()
     end)
   end)
 
@@ -171,13 +173,13 @@ describe('ideSidebar', function()
       ideSidebar.setup({ cmd = 'gemini' })
       local text = 'Hello, Gemini!'
       ideSidebar.sendText(text)
-      assert.spy(skterminal_spy.get).was.called_with('gemini', match.is_table())
+      assert.spy(terminalSpy.get).was.called_with('gemini', match.is_table())
       local bracketStart = '\27[200~'
       local bracketEnd = '\27[201~\r'
       local bracketedText = bracketStart .. text .. bracketEnd
       assert.spy(vim.api.nvim_chan_send).was.called_with(123, bracketedText)
-      assert.spy(term_spy.show).was.called(1)
-      assert.spy(term_spy.focus).was.called(1)
+      assert.spy(windowSpy.show).was.called(1)
+      assert.spy(windowSpy.focus).was.called(1)
     end)
   end)
 
@@ -198,7 +200,7 @@ describe('ideSidebar', function()
       )
       ideSidebar.sendDiagnostic(1)
 
-      local expected_data = {
+      local expectedData = {
         filename = '/fake/file.lua',
         diagnostics = {
           {
@@ -213,17 +215,115 @@ describe('ideSidebar', function()
       assert.spy(vim.diagnostic.get).was.called()
       assert.spy(vim.api.nvim_chan_send).was.called()
       local sent_text = vim.api.nvim_chan_send.calls[1].vals[2]
-      assert.are.same(expected_data, vim.fn.json_decode(sent_text:sub(7, -8)))
+      assert.are.same(expectedData, vim.fn.json_decode(sent_text:sub(7, -8)))
     end)
   end)
+
+  describe('handleGeminiSend', function()
+    it(
+      'should handle sending selected text when visual selection exists',
+      function()
+        ideSidebar.setup({ cmd = 'gemini' })
+        -- Mock the visual selection functions to simulate a selection
+        vim.fn.line = spy.new(function(arg)
+          if arg == "'<" then
+            return 5
+          elseif arg == "'>" then
+            return 5
+          else
+            return 0
+          end
+        end)
+        vim.fn.col = spy.new(function(arg)
+          if arg == "'<" then
+            return 2
+          elseif arg == "'>" then
+            return 8
+          else
+            return 0
+          end
+        end)
+        vim.api.nvim_buf_get_lines = spy.new(
+          function() return { 'selected text' } end
+        )
+        -- Spy on sendText to verify it's called with the correct text
+        local sendTextSpy = spy.on(ideSidebar, 'sendText')
+        local cmdOpts = { args = 'additional text' }
+        ideSidebar.handleGeminiSend(cmdOpts)
+        -- Verify sendText was called with the selected text plus the additional text
+        -- From 'selected text', substring from index 2 to 8 would be 'elected' (Lua uses 1-based indexing)
+        -- start_idx = 2 - 1 = 1, substring(1+1, 8) = 'elected'
+        assert.spy(sendTextSpy).was.called_with('elected additional text')
+      end
+    )
+
+    it('should send provided text when no visual selection exists', function()
+      ideSidebar.setup({ cmd = 'gemini' })
+      -- Mock the visual selection functions to simulate no selection
+      vim.fn.line = spy.new(function(arg)
+        if arg == "'<" then
+          return 0
+        elseif arg == "'>" then
+          return 0
+        else
+          return 0
+        end
+      end)
+      -- Spy on sendText to verify it's called with the correct text
+      local sendTextSpy = spy.on(ideSidebar, 'sendText')
+      local cmdOpts = { args = 'test text' }
+      ideSidebar.handleGeminiSend(cmdOpts)
+      -- Verify sendText was called with only the provided text
+      assert.spy(sendTextSpy).was.called_with('test text')
+    end)
+
+    it('should handle multi-line visual selection', function()
+      ideSidebar.setup({ cmd = 'gemini' })
+      -- Mock the visual selection functions to simulate a multi-line selection
+      vim.fn.line = spy.new(function(arg)
+        if arg == "'<" then
+          return 1
+        elseif arg == "'>" then
+          return 3
+        else
+          return 0
+        end
+      end)
+      vim.fn.col = spy.new(function(arg)
+        if arg == "'<" then
+          return 1
+        elseif arg == "'>" then
+          return 3
+        else
+          return 0
+        end
+      end)
+      vim.api.nvim_buf_get_lines = spy.new(
+        function()
+          return { 'line 1 content', 'line 2 content', 'line 3 content' }
+        end
+      )
+      -- Spy on sendText to verify it's called with the correct text
+      local sendTextSpy = spy.on(ideSidebar, 'sendText')
+      local cmdOpts = { args = 'extra text' }
+      ideSidebar.handleGeminiSend(cmdOpts)
+      -- Verify sendText was called with the selected lines plus the additional text
+      -- Lines 1-3 selected (with 0-indexed parameter to nvim_buf_get_lines: 0-3 means lines 1-3 in editor)
+      -- First line starts at col 1 (unchanged), last line ends at col 3 ('lin')
+      assert
+        .spy(sendTextSpy).was
+        .called_with('line 1 content\nline 2 content\nlin extra text')
+    end)
+  end)
+
   describe('setStyle', function()
     it('should set the style of the terminal', function()
       ideSidebar.setup({ cmd = 'gemini' })
       ideSidebar.setStyle('floating')
-      assert.spy(term_spy.hide).was.called(1)
+      assert.spy(windowSpy.hide).was.called(1)
       assert.spy(vim.defer_fn).was.called(1)
-      assert.spy(term_spy.toggle).was.called(1)
-      assert.equal(term_spy.opts.position, 'float')
+      assert.spy(windowSpy.toggle).was.called(1)
+      assert.equal(windowSpy.opts.position, 'float')
     end)
   end)
 end)

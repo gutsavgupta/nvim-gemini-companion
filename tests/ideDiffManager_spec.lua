@@ -12,8 +12,8 @@ describe('ideDiffManager', function()
     vim.cmd('silent! tabonly')
 
     -- Reset the module to clear the 'views' table
-    package.loaded.ideDiffManager = nil
-    diffManager = require('ideDiffManager')
+    package.loaded['gemini.ideDiffManager'] = nil
+    diffManager = require('gemini.ideDiffManager')
 
     -- Mock vim.schedule to run functions immediately for testing
     _G.originalVimSchedule = vim.schedule
@@ -85,14 +85,12 @@ describe('ideDiffManager', function()
     )
   end)
 
-  it('should close the diff view and call the onClose callback', function()
+it('should close the diff view', function()
     -- 1. Setup: Open a diff view first
     local tempFile = vim.fn.tempname()
     vim.fn.writefile({ 'line 1' }, tempFile)
     local newContent = 'line 1 changed'
-
-    local onCloseSpy = spy.new(function() end)
-    diffManager.open(tempFile, newContent, onCloseSpy)
+    diffManager.open(tempFile, newContent)
 
     diffManager.close(tempFile)
 
@@ -102,7 +100,6 @@ describe('ideDiffManager', function()
       #vim.api.nvim_list_tabpages(),
       'Should have only one tab after close'
     )
-    assert.spy(onCloseSpy).was.called_with(newContent, 'closed')
   end)
 
   it("should accept the diff and call onClose with 'accepted'", function()

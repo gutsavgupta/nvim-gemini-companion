@@ -11,8 +11,8 @@ describe('ideCntxManager', function()
 
   before_each(function()
     -- Reset the module to clear the state
-    package.loaded.ideCntxManager = nil
-    cntxManager = require('ideCntxManager')
+    package.loaded['gemini.ideCntxManager'] = nil
+    cntxManager = require('gemini.ideCntxManager')
 
     -- Clean up any buffers created by previous tests
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do

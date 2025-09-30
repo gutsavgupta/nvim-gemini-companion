@@ -1,5 +1,6 @@
 -- This file was created on September 26, 2025
--- This module is responsible for managing the sidebar which hosts the Gemini CLI.
+--- This module is responsible for managing the sidebar which hosts the Gemini CLI.
+-- Provides functions for toggling, switching, sending text, and configuring the sidebar terminal.
 
 local log = require('plenary.log').new({
   plugin = 'nvim-gemini-companion',
@@ -9,6 +10,7 @@ local log = require('plenary.log').new({
 local ideSidebar = {}
 local ideSidebarState = {
   lastActiveIdx = 1,
+  lastPresetIdx = 1,
   terminalOpts = {},
   presets = {
     ['right-fixed'] = {
@@ -61,7 +63,10 @@ if not snacksAvailable then
 end
 
 --- Extends the default configuration with user-provided options.
+-- This function is primarily used internally during setup to merge user options with defaults
+-- and apply preset window configurations.
 -- @param opts table A table of options to override the defaults.
+-- @param defaults table The default configuration table to extend.
 -- @return table The merged configuration table.
 function ideSidebar.extendDefaults(opts, defaults)
   local configOpts = vim.tbl_deep_extend('force', defaults, opts or {})
@@ -83,8 +88,8 @@ function ideSidebar.extendDefaults(opts, defaults)
   return configOpts
 end
 
---- Toggles the sidebar terminal. if terminal is valid should hide it
---- otherwise open the last active terminal
+--- Toggles the sidebar terminal.
+-- Used by the 'GeminiToggle' user command to show/hide the sidebar terminal.
 function ideSidebar.toggle()
   local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
   local term, created = skterminal.get(opts.cmd, opts)
@@ -92,8 +97,9 @@ function ideSidebar.toggle()
   term:toggle()
 end
 
--- Switch the sidebar terminal to next command, hide the current one
--- and open the next one
+--- Switches the sidebar terminal to the next command in the list, hiding the current one
+--- and opening the next one.
+-- Used internally when multiple commands are configured and user presses Tab in terminal mode.
 function ideSidebar.switch()
   local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
   local term, created = skterminal.get(opts.cmd, opts)
@@ -108,7 +114,8 @@ function ideSidebar.switch()
   nextTerm:focus()
 end
 
--- Close the sidebar terminal
+--- Closes the sidebar terminal, stopping the associated job and cleaning up resources.
+-- Used by the 'GeminiClose' user command to completely close the sidebar terminal.
 function ideSidebar.close()
   local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
   local term =
@@ -127,7 +134,7 @@ end
 
 --- Sends text to the sidebar last active terminal.
 -- The text is bracketed to ensure it's treated as a single block.
--- @param opts table Configuration options for the sidebar.
+-- Used internally to send commands or data to the active Gemini/Qwen terminal.
 -- @param text string The text to send to the terminal.
 function ideSidebar.sendText(text)
   local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
@@ -148,8 +155,10 @@ function ideSidebar.sendText(text)
 end
 
 --- Sends LSP diagnostics for a buffer to the sidebar.
+-- Used by 'GeminiSendFileDiagnostic' and 'GeminiSendLineDiagnostic' commands to send
+-- diagnostic information to the active terminal for analysis.
 -- @param bufnr number The buffer number to get diagnostics from.
--- @param linenumber number (optional) The line number to filter diagnostics by.
+-- @param linenumber number (optional) The line number to filter diagnostics by. If nil, sends all diagnostics for the buffer.
 function ideSidebar.sendDiagnostic(bufnr, linenumber)
   local diagnostics = vim.diagnostic.get(bufnr)
 
@@ -192,8 +201,8 @@ function ideSidebar.sendDiagnostic(bufnr, linenumber)
   ideSidebar.sendText(diagnosticString)
 end
 
---- Sets the style of the sidebar window.
--- @param opts table Configuration options for the sidebar.
+--- Sets the style of the sidebar window using a preset.
+-- Changes the appearance and position of the sidebar using predefined configurations.
 -- @param presetName string The name of the preset style to apply.
 function ideSidebar.setStyle(presetName)
   local preset = ideSidebarState.presets[presetName]
@@ -214,8 +223,84 @@ function ideSidebar.setStyle(presetName)
   vim.defer_fn(ideSidebar.toggle, 100)
 end
 
---- Sets up the Gemini sidebar, creating user commands.
--- @param opts table Configuration options for the sidebar.
+--- Switches the sidebar style to the next preset or to the specified preset.
+-- If no preset name is provided, cycles to the next preset in the list.
+-- Used by the 'GeminiSwitchSidebarStyle' user command to change the sidebar appearance.
+-- @param cmdOpts table Command options containing fargs for preset name.
+function ideSidebar.switchStylePreset(cmdOpts)
+  local presetName = cmdOpts.fargs[1]
+  local presetKeys = vim.tbl_keys(ideSidebarState.presets)
+  if not presetName then
+    presetName = presetKeys[ideSidebarState.lastPresetIdx]
+    ideSidebarState.lastPresetIdx = (
+      ideSidebarState.lastPresetIdx % #presetKeys
+    ) + 1
+  else
+    if not ideSidebarState.presets[presetName] then
+      log.warn('Invalid sidebar style preset: ' .. presetName)
+      return
+    end
+    for i, key in ipairs(presetKeys) do
+      if key == presetName then
+        ideSidebarState.lastPresetIdx = i
+        break
+      end
+    end
+  end
+  ideSidebar.setStyle(presetName)
+end
+
+--- Handles the GeminiSend command, processing visual selections and sending text to the active terminal.
+-- When called with visual selection, sends the selected text along with any additional arguments.
+-- When called without selection, sends only the provided arguments.
+-- @param cmdOpts table The command options, including args and range information.
+function ideSidebar.handleGeminiSend(cmdOpts)
+  local text = cmdOpts.args or ''
+  local selectedText = ''
+
+  -- Check if we have a visual selection range ('<,'> notation)
+  local startLine, endLine = vim.fn.line("'<"), vim.fn.line("'>")
+  local startCol, endCol = vim.fn.col("'<"), vim.fn.col("'>")
+
+  if startLine > 0 and endLine >= startLine then
+    -- We have a visual selection
+    local lines = vim.api.nvim_buf_get_lines(0, startLine - 1, endLine, false)
+
+    if #lines == 1 then
+      -- Single line selection - handle column-wise selection
+      local startIdx = startCol - 1
+      local endIdx = endCol
+      if endIdx > #lines[1] then endIdx = #lines[1] end
+      if startIdx < #lines[1] then
+        lines[1] = string.sub(lines[1], startIdx + 1, endIdx)
+      end
+    else
+      -- Multi-line selection - trim first and last line according to column selection
+      local firstLine = lines[1]
+      if startCol <= #firstLine then
+        lines[1] = string.sub(firstLine, startCol, #firstLine)
+      end
+
+      local lastLine = lines[#lines]
+      if endCol <= #lastLine then
+        lines[#lines] = string.sub(lastLine, 1, endCol)
+      end
+    end
+
+    selectedText = table.concat(lines, '\n')
+    text = selectedText .. ' ' .. text
+  end
+
+  ideSidebar.sendText(text)
+end
+
+--- Sets up the Gemini sidebar, creating user commands and terminal configurations.
+-- @param opts table Configuration options for the sidebar with the following fields:
+--                  - cmds (table): List of commands to initialize ('gemini', 'qwen', etc.)
+--                  - cmd (string): Single command to use (alternative to cmds)
+--                  - port (number): Port number for the Gemini/Qwen server
+--                  - env (table): Additional environment variables
+--                  - win (table): Window configuration options including preset
 function ideSidebar.setup(opts)
   -------------------------------------------------------
   --- Setup Defaults
@@ -282,39 +367,24 @@ function ideSidebar.setup(opts)
     { desc = 'Toggle Gemini/Qwen sidebar' }
   )
 
-  local lastPresetIdx = 1
-  vim.api.nvim_create_user_command('GeminiSwitchSidebarStyle', function(cmdOpts)
-    local presetName = cmdOpts.fargs[1]
-    local presetKeys = vim.tbl_keys(ideSidebarState.presets)
-    if not presetName then
-      presetName = presetKeys[lastPresetIdx]
-      lastPresetIdx = (lastPresetIdx % #presetKeys) + 1
-    else
-      if not ideSidebarState.presets[presetName] then
-        log.warn('Invalid sidebar style preset: ' .. presetName)
-        return
-      end
-      for i, key in ipairs(presetKeys) do
-        if key == presetName then
-          lastPresetIdx = i
-          break
-        end
-      end
-    end
-    ideSidebar.setStyle(presetName)
-  end, {
-    nargs = '?',
-    desc = 'Switch the style of the Gemini/Qwen sidebar. Presets:'
-      .. vim.inspect(ideSidebarState.presets),
-    complete = function() return vim.tbl_keys(ideSidebarState.presets) end,
-  })
+  vim.api.nvim_create_user_command(
+    'GeminiSwitchSidebarStyle',
+    ideSidebar.switchStylePreset,
+    {
+      nargs = '?',
+      desc = 'Switch the style of the Gemini/Qwen sidebar. Presets:'
+        .. vim.inspect(ideSidebarState.presets),
+      complete = function() return vim.tbl_keys(ideSidebarState.presets) end,
+    }
+  )
 
   vim.api.nvim_create_user_command(
     'GeminiSend',
-    function(cmdOpts) ideSidebar.sendText(cmdOpts.args) end,
+    function(cmdOpts) ideSidebar.handleGeminiSend(cmdOpts) end,
     {
       nargs = '*',
-      desc = 'Send text to active sidebar',
+      range = true, -- Enable range support for visual selections
+      desc = 'Send selected text (with provided text) to active sidebar',
     }
   )
 

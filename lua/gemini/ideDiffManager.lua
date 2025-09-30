@@ -3,22 +3,31 @@
 -- It allows opening a diff view between a file and new content, and handling
 -- user actions like accepting or rejecting the changes.
 
-local log = require('plenary.log').new({
-  plugin = 'nvim-gemini-companion',
-  level = os.getenv('NGC_LOG_LEVEL') or 'warn',
-})
-
 local manager = {}
 local views = {}
 
 ---
----
--- Opens a new diff view in a new tab.
--- @param filePath string The absolute path to the original file.
--- @param newContent string The new content to be diffed against the original file.
--- @param onClose function A callback function that is called when the diff view is closed.
---   It receives the final content of the modified buffer and a status string
---   ("accepted", "rejected", or "closed").
+-- Opens a new diff view in a new tab, showing the differences between the
+-- content of a local file and a new string of content. This is useful for
+-- previewing changes before applying them.
+--
+-- The user can accept the changes, which will trigger a callback with the new
+-- content, or reject them. The diff view is automatically closed after either
+-- action.
+--
+-- @param filePath string The absolute path to the original file. This file is
+--   used as the "original" side of the diff.
+-- @param newContent string The new content to be diffed against the original
+--   file. This is shown in the "modified" side of the diff.
+-- @param onClose function A callback function that is called when the diff view
+--   is closed. It receives two arguments:
+--   - `finalContent`: A string with the content of the modified buffer when the
+--     view was closed. This allows the caller to get the latest version of the
+--     content, including any manual edits made by the user in the diff view.
+--   - `status`: A string indicating how the view was closed. It can be one of
+--     the following:
+--       - `"accepted"`: The user accepted the changes.
+--       - `"rejected"`: The user rejected the changes.
 function manager.open(filePath, newContent, onClose)
   vim.schedule(function()
     -- 1. Get filename and create the modified buffer name
@@ -89,8 +98,14 @@ function manager.open(filePath, newContent, onClose)
   end)
 end
 
-local function closeView(filePath, status)
-  status = status or 'closed'
+---
+-- Closes the diff view for a given file path and returns the final content of
+-- the modified buffer. This function is used internally to clean up the view
+-- and retrieve the content before calling the `onClose` callback.
+--
+-- @param filePath string The file path of the diff to close.
+-- @return string The final content of the modified buffer.
+local function closeView(filePath)
   local view = views[filePath]
   if not view then return end
 
@@ -107,31 +122,61 @@ local function closeView(filePath, status)
   end
 
   views[filePath] = nil
-  if view.onClose then view.onClose(content, status) end
+  return content
 end
 
 ---
----
 -- Closes the diff view for a given file path.
+--
+-- This is a convenience function that wraps `closeView` to expose it as part
+-- of the public API. It is not typically used directly, as the view is
+-- automatically closed when the user accepts or rejects the changes.
+--
 -- @param filePath string The file path of the diff to close.
-function manager.close(filePath) closeView(filePath, 'closed') end
+function manager.close(filePath) return closeView(filePath) end
 
----
 ---
 -- Accepts the changes in the diff view.
--- This closes the view and triggers the onClose callback with "accepted" status.
+--
+-- This closes the view and triggers the `onClose` callback with an "accepted"
+-- status. The final content of the modified buffer is passed to the callback,
+-- allowing the caller to apply the changes.
+--
 -- @param filePath string The file path of the diff to accept.
-function manager.accept(filePath) closeView(filePath, 'accepted') end
+function manager.accept(filePath)
+  local view = views[filePath]
+  local content = closeView(filePath)
+  if content and view and view.onClose then
+    view.onClose(content, 'accepted')
+  end
+end
 
----
 ---
 -- Rejects the changes in the diff view.
--- This closes the view and triggers the onClose callback with "rejected" status.
+--
+-- This closes the view and triggers the `onClose` callback with a "rejected"
+-- status. The final content of the modified buffer is still passed to the
+-- callback, but it is up to the caller to decide whether to use it.
+--
 -- @param filePath string The file path of the diff to reject.
-function manager.reject(filePath) closeView(filePath, 'rejected') end
+function manager.reject(filePath)
+  local view = views[filePath]
+  local content = closeView(filePath)
+  if content and view and view.onClose then
+    view.onClose(content, 'rejected')
+  end
+end
 
 ---
----
+-- Retrieves the file path associated with a given window ID.
+--
+-- This function is used to find the file path of the original file in a diff
+-- view, which is necessary to perform actions like accepting or rejecting the
+-- changes.
+--
+-- @param winId number The window ID to look up.
+-- @return string|nil The file path if the window is part of a diff view, or
+--   nil otherwise.
 function manager.getFilePathFromWindowID(winId)
   for filePath, view in pairs(views) do
     for _, diffWinId in ipairs(view.winIds) do
@@ -142,6 +187,11 @@ function manager.getFilePathFromWindowID(winId)
   return nil
 end
 
+---
+-- Sets up the user commands for interacting with the diff view.
+--
+-- This function creates the `:GeminiAccept` and `:GeminiReject` commands, which
+-- allow the user to accept or reject the changes in the current diff view.
 function manager.setup()
   vim.api.nvim_create_user_command('GeminiAccept', function()
     local winId = vim.api.nvim_get_current_win()

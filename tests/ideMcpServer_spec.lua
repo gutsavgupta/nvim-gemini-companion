@@ -1,7 +1,7 @@
 -- This file was created on September 24, 2025
 -- This file contains tests for the ideMcpServer.lua module.
 
-local IdeMcpServer = require('ideMcpServer')
+local IdeMcpServer = require('gemini.ideMcpServer')
 local assert = require('luassert')
 local spy = require('luassert.spy')
 
