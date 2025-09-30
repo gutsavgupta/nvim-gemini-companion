@@ -9,6 +9,7 @@ local log = require('plenary.log').new({
 local ideSidebar = {}
 local ideSidebarState = {
   lastActiveIdx = 1,
+  lastPresetIdx = 1,
   terminalOpts = {},
   presets = {
     ['right-fixed'] = {
@@ -214,43 +215,68 @@ function ideSidebar.setStyle(presetName)
   vim.defer_fn(ideSidebar.toggle, 100)
 end
 
+--- Switch the sidebar terminal to next command, hide the current one
+-- and open the next one
+function ideSidebar.switchStylePreset(cmdOpts)
+  local presetName = cmdOpts.fargs[1]
+  local presetKeys = vim.tbl_keys(ideSidebarState.presets)
+  if not presetName then
+    presetName = presetKeys[ideSidebarState.lastPresetIdx]
+    ideSidebarState.lastPresetIdx = (
+      ideSidebarState.lastPresetIdx % #presetKeys
+    ) + 1
+  else
+    if not ideSidebarState.presets[presetName] then
+      log.warn('Invalid sidebar style preset: ' .. presetName)
+      return
+    end
+    for i, key in ipairs(presetKeys) do
+      if key == presetName then
+        ideSidebarState.lastPresetIdx = i
+        break
+      end
+    end
+  end
+  ideSidebar.setStyle(presetName)
+end
+
 --- Handles the GeminiSend command, processing visual selections and sending text to the active terminal.
 -- @param cmdOpts table The command options, including args and range information.
 function ideSidebar.handleGeminiSend(cmdOpts)
   local text = cmdOpts.args or ''
-  local selected_text = ''
+  local selectedText = ''
 
   -- Check if we have a visual selection range ('<,'> notation)
-  local start_line, end_line = vim.fn.line("'<"), vim.fn.line("'>")
-  local start_col, end_col = vim.fn.col("'<"), vim.fn.col("'>")
+  local startLine, endLine = vim.fn.line("'<"), vim.fn.line("'>")
+  local startCol, endCol = vim.fn.col("'<"), vim.fn.col("'>")
 
-  if start_line > 0 and end_line >= start_line then
+  if startLine > 0 and endLine >= startLine then
     -- We have a visual selection
-    local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
+    local lines = vim.api.nvim_buf_get_lines(0, startLine - 1, endLine, false)
 
     if #lines == 1 then
       -- Single line selection - handle column-wise selection
-      local start_idx = start_col - 1
-      local end_idx = end_col
-      if end_idx > #lines[1] then end_idx = #lines[1] end
-      if start_idx < #lines[1] then
-        lines[1] = string.sub(lines[1], start_idx + 1, end_idx)
+      local startIdx = startCol - 1
+      local endIdx = endCol
+      if endIdx > #lines[1] then endIdx = #lines[1] end
+      if startIdx < #lines[1] then
+        lines[1] = string.sub(lines[1], startIdx + 1, endIdx)
       end
     else
       -- Multi-line selection - trim first and last line according to column selection
-      local first_line = lines[1]
-      if start_col <= #first_line then
-        lines[1] = string.sub(first_line, start_col, #first_line)
+      local firstLine = lines[1]
+      if startCol <= #firstLine then
+        lines[1] = string.sub(firstLine, startCol, #firstLine)
       end
 
-      local last_line = lines[#lines]
-      if end_col <= #last_line then
-        lines[#lines] = string.sub(last_line, 1, end_col)
+      local lastLine = lines[#lines]
+      if endCol <= #lastLine then
+        lines[#lines] = string.sub(lastLine, 1, endCol)
       end
     end
 
-    selected_text = table.concat(lines, '\n')
-    text = selected_text .. ' ' .. text
+    selectedText = table.concat(lines, '\n')
+    text = selectedText .. ' ' .. text
   end
 
   ideSidebar.sendText(text)
@@ -324,32 +350,16 @@ function ideSidebar.setup(opts)
     { desc = 'Toggle Gemini/Qwen sidebar' }
   )
 
-  local lastPresetIdx = 1
-  vim.api.nvim_create_user_command('GeminiSwitchSidebarStyle', function(cmdOpts)
-    local presetName = cmdOpts.fargs[1]
-    local presetKeys = vim.tbl_keys(ideSidebarState.presets)
-    if not presetName then
-      presetName = presetKeys[lastPresetIdx]
-      lastPresetIdx = (lastPresetIdx % #presetKeys) + 1
-    else
-      if not ideSidebarState.presets[presetName] then
-        log.warn('Invalid sidebar style preset: ' .. presetName)
-        return
-      end
-      for i, key in ipairs(presetKeys) do
-        if key == presetName then
-          lastPresetIdx = i
-          break
-        end
-      end
-    end
-    ideSidebar.setStyle(presetName)
-  end, {
-    nargs = '?',
-    desc = 'Switch the style of the Gemini/Qwen sidebar. Presets:'
-      .. vim.inspect(ideSidebarState.presets),
-    complete = function() return vim.tbl_keys(ideSidebarState.presets) end,
-  })
+  vim.api.nvim_create_user_command(
+    'GeminiSwitchSidebarStyle',
+    ideSidebar.switchStylePreset,
+    {
+      nargs = '?',
+      desc = 'Switch the style of the Gemini/Qwen sidebar. Presets:'
+        .. vim.inspect(ideSidebarState.presets),
+      complete = function() return vim.tbl_keys(ideSidebarState.presets) end,
+    }
+  )
 
   vim.api.nvim_create_user_command(
     'GeminiSend',
