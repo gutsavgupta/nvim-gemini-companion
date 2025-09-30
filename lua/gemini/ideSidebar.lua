@@ -49,6 +49,8 @@ local ideSidebarState = {
       max_width = nil,
     },
   },
+  -- Index of 'right-fixed' preset (computed once during initialization)
+  defaultPresetIdx = 1,
 }
 
 local snacksAvailable, skterminal = pcall(require, 'snacks.terminal')
@@ -62,6 +64,33 @@ if not snacksAvailable then
   return
 end
 
+-- Compute the default preset index once during module loading
+local presetKeys = vim.tbl_keys(ideSidebarState.presets)
+for i, key in ipairs(presetKeys) do
+  if key == 'right-fixed' then
+    ideSidebarState.defaultPresetIdx = i
+    break
+  end
+end
+
+--- Gets the index of a preset by its name in the presets table.
+-- @param presetName string The name of the preset to find the index for.
+-- @return number The index of the preset, or the stored index of 'right-fixed' if not found.
+local function getPresetIdx(presetName)
+  for i, key in ipairs(presetKeys) do
+    if key == presetName then return i end
+  end
+  -- Return the stored index of 'right-fixed' (default fallback) if preset not found
+  log.warn(
+    string.format(
+      'Invalid sidebar style preset: %s, falling back to %s',
+      presetName,
+      'right-fixed'
+    )
+  )
+  return ideSidebarState.defaultPresetIdx
+end
+
 --- Extends the default configuration with user-provided options.
 -- This function is primarily used internally during setup to merge user options with defaults
 -- and apply preset window configurations.
@@ -72,16 +101,12 @@ function ideSidebar.extendDefaults(opts, defaults)
   local configOpts = vim.tbl_deep_extend('force', defaults, opts or {})
 
   -- Determine window style from preset and user overrides
-  local presetName = (configOpts.win and configOpts.win.preset) or 'right-fixed'
+  local presetIdx =
+    getPresetIdx(configOpts.win and configOpts.win.preset or 'right-fixed')
+  local presetName = presetKeys[presetIdx]
   local presetOpts = ideSidebarState.presets[presetName]
-  if not presetOpts then
-    log.warn(
-      'Invalid sidebar style preset: '
-        .. presetName
-        .. ". Falling back to 'right-fixed'."
-    )
-    presetOpts = ideSidebarState.presets['right-fixed']
-  end
+  ideSidebarState.lastPresetIdx = presetIdx
+
   -- The user's win options override the preset
   configOpts.win =
     vim.tbl_deep_extend('force', presetOpts, configOpts.win or {})
@@ -212,7 +237,7 @@ function ideSidebar.setStyle(presetName)
   end
 
   for _, opts in ipairs(ideSidebarState.terminalOpts) do
-    opts = vim.tbl_deep_extend('force', opts, preset)
+    opts.win = vim.tbl_deep_extend('force', opts.win, preset)
     local term, created = skterminal.get(opts.cmd, opts)
     if not created and term and term:buf_valid() then
       term:hide()
@@ -229,25 +254,17 @@ end
 -- @param cmdOpts table Command options containing fargs for preset name.
 function ideSidebar.switchStylePreset(cmdOpts)
   local presetName = cmdOpts.fargs[1]
-  local presetKeys = vim.tbl_keys(ideSidebarState.presets)
   if not presetName then
-    presetName = presetKeys[ideSidebarState.lastPresetIdx]
-    ideSidebarState.lastPresetIdx = (
-      ideSidebarState.lastPresetIdx % #presetKeys
-    ) + 1
+    presetName = presetKeys[ideSidebarState.lastPresetIdx % #presetKeys + 1]
   else
     if not ideSidebarState.presets[presetName] then
       log.warn('Invalid sidebar style preset: ' .. presetName)
       return
     end
-    for i, key in ipairs(presetKeys) do
-      if key == presetName then
-        ideSidebarState.lastPresetIdx = i
-        break
-      end
-    end
+    -- Use the helper function to get preset index
   end
   ideSidebar.setStyle(presetName)
+  ideSidebarState.lastPresetIdx = getPresetIdx(presetName)
 end
 
 --- Handles the GeminiSend command, processing visual selections and sending text to the active terminal.

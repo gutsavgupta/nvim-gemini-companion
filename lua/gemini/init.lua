@@ -143,7 +143,7 @@ local function handleToolCall(client, request)
             content = finalContent,
           })
         elseif status == 'rejected' then
-          sendMcpNotification('ide/diffRejected', {
+          sendMcpNotification('ide/diffClosed', {
             filePath = toolParams.filePath,
           })
         end
