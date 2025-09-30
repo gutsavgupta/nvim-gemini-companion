@@ -60,7 +60,11 @@ describe('ideSidebar', function()
       assert.spy(vim.api.nvim_create_user_command).was.called_with(
         'GeminiSend',
         match.is_function(),
-        { nargs = '*', desc = 'Send text to active sidebar' }
+        {
+          nargs = '*',
+          range = true,
+          desc = 'Send selected text (with provided text) to active sidebar',
+        }
       )
       assert.spy(vim.api.nvim_create_user_command).was.called_with(
         'GeminiSendFileDiagnostic',
@@ -216,6 +220,104 @@ describe('ideSidebar', function()
       assert.are.same(expected_data, vim.fn.json_decode(sent_text:sub(7, -8)))
     end)
   end)
+
+  describe('handleGeminiSend', function()
+    it(
+      'should handle sending selected text when visual selection exists',
+      function()
+        ideSidebar.setup({ cmd = 'gemini' })
+        -- Mock the visual selection functions to simulate a selection
+        vim.fn.line = spy.new(function(arg)
+          if arg == "'<" then
+            return 5
+          elseif arg == "'>" then
+            return 5
+          else
+            return 0
+          end
+        end)
+        vim.fn.col = spy.new(function(arg)
+          if arg == "'<" then
+            return 2
+          elseif arg == "'>" then
+            return 8
+          else
+            return 0
+          end
+        end)
+        vim.api.nvim_buf_get_lines = spy.new(
+          function() return { 'selected text' } end
+        )
+        -- Spy on sendText to verify it's called with the correct text
+        local sendTextSpy = spy.on(ideSidebar, 'sendText')
+        local cmdOpts = { args = 'additional text' }
+        ideSidebar.handleGeminiSend(cmdOpts)
+        -- Verify sendText was called with the selected text plus the additional text
+        -- From 'selected text', substring from index 2 to 8 would be 'elected' (Lua uses 1-based indexing)
+        -- start_idx = 2 - 1 = 1, substring(1+1, 8) = 'elected'
+        assert.spy(sendTextSpy).was.called_with('elected additional text')
+      end
+    )
+
+    it('should send provided text when no visual selection exists', function()
+      ideSidebar.setup({ cmd = 'gemini' })
+      -- Mock the visual selection functions to simulate no selection
+      vim.fn.line = spy.new(function(arg)
+        if arg == "'<" then
+          return 0
+        elseif arg == "'>" then
+          return 0
+        else
+          return 0
+        end
+      end)
+      -- Spy on sendText to verify it's called with the correct text
+      local sendTextSpy = spy.on(ideSidebar, 'sendText')
+      local cmdOpts = { args = 'test text' }
+      ideSidebar.handleGeminiSend(cmdOpts)
+      -- Verify sendText was called with only the provided text
+      assert.spy(sendTextSpy).was.called_with('test text')
+    end)
+
+    it('should handle multi-line visual selection', function()
+      ideSidebar.setup({ cmd = 'gemini' })
+      -- Mock the visual selection functions to simulate a multi-line selection
+      vim.fn.line = spy.new(function(arg)
+        if arg == "'<" then
+          return 1
+        elseif arg == "'>" then
+          return 3
+        else
+          return 0
+        end
+      end)
+      vim.fn.col = spy.new(function(arg)
+        if arg == "'<" then
+          return 1
+        elseif arg == "'>" then
+          return 3
+        else
+          return 0
+        end
+      end)
+      vim.api.nvim_buf_get_lines = spy.new(
+        function()
+          return { 'line 1 content', 'line 2 content', 'line 3 content' }
+        end
+      )
+      -- Spy on sendText to verify it's called with the correct text
+      local sendTextSpy = spy.on(ideSidebar, 'sendText')
+      local cmdOpts = { args = 'extra text' }
+      ideSidebar.handleGeminiSend(cmdOpts)
+      -- Verify sendText was called with the selected lines plus the additional text
+      -- Lines 1-3 selected (with 0-indexed parameter to nvim_buf_get_lines: 0-3 means lines 1-3 in editor)
+      -- First line starts at col 1 (unchanged), last line ends at col 3 ('lin')
+      assert
+        .spy(sendTextSpy).was
+        .called_with('line 1 content\nline 2 content\nlin extra text')
+    end)
+  end)
+
   describe('setStyle', function()
     it('should set the style of the terminal', function()
       ideSidebar.setup({ cmd = 'gemini' })

@@ -214,6 +214,48 @@ function ideSidebar.setStyle(presetName)
   vim.defer_fn(ideSidebar.toggle, 100)
 end
 
+--- Handles the GeminiSend command, processing visual selections and sending text to the active terminal.
+-- @param cmdOpts table The command options, including args and range information.
+function ideSidebar.handleGeminiSend(cmdOpts)
+  local text = cmdOpts.args or ''
+  local selected_text = ''
+
+  -- Check if we have a visual selection range ('<,'> notation)
+  local start_line, end_line = vim.fn.line("'<"), vim.fn.line("'>")
+  local start_col, end_col = vim.fn.col("'<"), vim.fn.col("'>")
+
+  if start_line > 0 and end_line >= start_line then
+    -- We have a visual selection
+    local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
+
+    if #lines == 1 then
+      -- Single line selection - handle column-wise selection
+      local start_idx = start_col - 1
+      local end_idx = end_col
+      if end_idx > #lines[1] then end_idx = #lines[1] end
+      if start_idx < #lines[1] then
+        lines[1] = string.sub(lines[1], start_idx + 1, end_idx)
+      end
+    else
+      -- Multi-line selection - trim first and last line according to column selection
+      local first_line = lines[1]
+      if start_col <= #first_line then
+        lines[1] = string.sub(first_line, start_col, #first_line)
+      end
+
+      local last_line = lines[#lines]
+      if end_col <= #last_line then
+        lines[#lines] = string.sub(last_line, 1, end_col)
+      end
+    end
+
+    selected_text = table.concat(lines, '\n')
+    text = selected_text .. ' ' .. text
+  end
+
+  ideSidebar.sendText(text)
+end
+
 --- Sets up the Gemini sidebar, creating user commands.
 -- @param opts table Configuration options for the sidebar.
 function ideSidebar.setup(opts)
@@ -311,10 +353,11 @@ function ideSidebar.setup(opts)
 
   vim.api.nvim_create_user_command(
     'GeminiSend',
-    function(cmdOpts) ideSidebar.sendText(cmdOpts.args) end,
+    function(cmdOpts) ideSidebar.handleGeminiSend(cmdOpts) end,
     {
       nargs = '*',
-      desc = 'Send text to active sidebar',
+      range = true, -- Enable range support for visual selections
+      desc = 'Send selected text (with provided text) to active sidebar',
     }
   )
 
