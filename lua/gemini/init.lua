@@ -201,7 +201,11 @@ function M.setup(opts)
   opts.port = port
   vim.api.nvim_create_autocmd('VimLeave', {
     pattern = '*',
-    callback = function() server:stop() end,
+    callback = function()
+      log.info('Stopping MCP server')
+      if not server.stop then log.info('Calling wrong method') end
+      server:stop()
+    end,
   })
 
   -- 2. Setup context manager
