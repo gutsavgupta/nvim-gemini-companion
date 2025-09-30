@@ -201,7 +201,9 @@ function M.setup(opts)
   opts.port = port
   vim.api.nvim_create_autocmd('VimLeave', {
     pattern = '*',
-    callback = function() server:stop() end,
+    callback = function()
+      if server then server:close() end
+    end,
   })
 
   -- 2. Setup context manager
