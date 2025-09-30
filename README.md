@@ -1,8 +1,8 @@
 # nvim-gemini-companion
 
-✨ Your Ultimate AI-Powered Neovim Sidekick! 🚀 Now with Dual AI Support! 🤖
+🚀 Now with Dual Agent Support (++Qwen-Code)! 🤖
 
-`nvim-gemini-companion` is a turbocharged Neovim plugin that brings Gemini CLI + Qwen-Code directly into your editor! 💥 Get ready for diff views, AI agent management, and seamless file modifications — all while keeping your workflow blazing fast! ⚡ Enjoy up to 3000 Agentic requests per day (1000 from Gemini-cli + 2000 from Qwen-code) with their free subscription model! 📊
+`nvim-gemini-companion` brings Gemini CLI + Qwen-Code directly into Neovim! 🚀 Enjoy diff views, agent management, and smart file modifications while keeping your workflow blazing fast. 🌟 Get 3000 free daily requests (1000 from Gemini + 2000 from Qwen) with their subscription-free model - no middleware needed!
 
 ![Gemini](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/Gemini-20250928.png)
 -------
@@ -10,7 +10,7 @@
 -------
 
 ## Demo
-https://github.com/user-attachments/assets/bcce8fce-78d8-4f5a-8945-365ce636adf7
+https://github.com/user-attachments/assets/48324de2-1c7c-4a00-966a-23836aecd29e
 
 ## Features
 
@@ -20,6 +20,7 @@ https://github.com/user-attachments/assets/bcce8fce-78d8-4f5a-8945-365ce636adf7
 *   ✅ **Tab-based Switching:** Effortlessly switch between AI terminals with `<Tab>`
 *   ✅ **Context Management:** Tracks open files, cursor position, and selections for AI context
 *   ✅ **LSP Diagnostics:** Send file/line diagnostics to AI agents for enhanced debugging
+*   ✅ **Send Selection:** Send selected text + prompt directly to AI agents using `:GeminiSend` command
 *   ✅ **Switchable Sidebar:** Choose between `right-fixed`, `left-fixed`, `bottom-fixed`, or `floating` styles
 *   ✅ **Highly Customizable:** Configure commands, window styles, and key bindings to your liking
 
@@ -28,7 +29,7 @@ https://github.com/user-attachments/assets/bcce8fce-78d8-4f5a-8945-365ce636adf7
 Install `gemini` and/or `qwen-code` CLIs to your system PATH for plugin functionality. 
 
 *   [gemini-cli](https://github.com/google-gemini/gemini-cli) 
-*   [qwen-code](https://github.com/qwen-team/qwen-code)
+*   [qwen-code](https://github.com/QwenLM/qwen-code)
 
 ## Installation
 
