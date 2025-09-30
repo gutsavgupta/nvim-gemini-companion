@@ -212,7 +212,7 @@ function ideSidebar.setStyle(presetName)
   end
 
   for _, opts in ipairs(ideSidebarState.terminalOpts) do
-    opts = vim.tbl_deep_extend('force', opts, preset)
+    opts.win = vim.tbl_deep_extend('force', opts.win, preset)
     local term, created = skterminal.get(opts.cmd, opts)
     if not created and term and term:buf_valid() then
       term:hide()
