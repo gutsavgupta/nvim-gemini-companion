@@ -1,7 +1,7 @@
 -- This file was created on September 25, 2025
 -- This module is responsible for tracking the workspace state, including open files,
 -- cursor position, and selected text. It provides the state for the
--- ide/contextUpdate notification.
+-- ide/contextUpdate notification sent to the Gemini CLI.
 
 local log = require('plenary.log').new({
   plugin = 'nvim-gemini-companion',
@@ -16,9 +16,12 @@ local state = {
 }
 
 ---
--- Ensures that an empty table is encoded as an empty JSON array.
--- @param t table The table to check.
--- @return table The original table or a new table with metatable for JSON encoding.
+-- Ensures that an empty Lua table is encoded as an empty JSON array (`[]`)
+-- instead of an empty object (`{}`). This is crucial for the Gemini CLI, which
+-- expects a list of files.
+-- @param t table The table to process.
+-- @return table The original table if not empty, or a new table with a metatable
+--   to force JSON array encoding for empty tables.
 local function createJsonArray(t)
   if t and #t > 0 then return t end
   -- For some JSON encoders (like dkjson), this forces an empty table
@@ -29,11 +32,11 @@ local function createJsonArray(t)
 end
 
 ---
--- Gets file information from a buffer number.
--- This is a helper function to create a file info object from a buffer.
--- It returns nil if the buffer is not a valid, named file.
+-- Creates a file information object from a buffer number.
+-- It returns nil if the buffer is not associated with a named, readable file on disk.
 -- @param bufnr number The buffer number.
--- @return table|nil A table with file information, or nil.
+-- @return table|nil A table containing the file's absolute path and a timestamp, or nil.
+--   Example: { path = "/path/to/file.lua", timestamp = 1678886400 }
 local function getFileInfo(bufnr)
   if not bufnr or bufnr == 0 then return nil end
   local bufName = vim.api.nvim_buf_get_name(bufnr)
@@ -45,9 +48,10 @@ local function getFileInfo(bufnr)
 end
 
 ---
--- Updates the list of open files, making the given buffer the most recent one.
--- If the file is already in the list, it is moved to the front.
--- The previously active file is deactivated.
+-- Updates the internal list of open files.
+-- This function marks the specified buffer as the most recent, active file.
+-- It deactivates the previously active file, moves the new one to the front of the list,
+-- and trims the list if it exceeds `maxFiles`.
 -- @param bufnr number The buffer number of the file to make active.
 local function addOrMoveToFront(bufnr)
   local fileInfo = getFileInfo(bufnr)
@@ -78,13 +82,15 @@ local function addOrMoveToFront(bufnr)
 
   -- Enforce max length
   if #state.openFiles > maxFiles then table.remove(state.openFiles) end
-end
+}
 
 ---
--- Returns the full IdeContext object to be sent to the Gemini CLI.
--- This function is the main entry point for getting the workspace state.
--- It updates the active file with the current cursor position and selection.
--- @return table The IdeContext object.
+-- Gathers and returns the complete IDE context for the Gemini CLI.
+-- This is the main public function of the module. It updates the active file's
+-- state with the current cursor position and any selected text before returning
+-- the full context object.
+-- @return table The IdeContext object, structured for the Gemini CLI.
+--   Example: { workspaceState = { openFiles = {...}, isTrusted = true } }
 function manager.getContext()
   local currentBuf = vim.api.nvim_get_current_buf()
   addOrMoveToFront(currentBuf)
@@ -98,8 +104,9 @@ function manager.getContext()
       character = cursorPos[2] + 1,
     }
 
-    -- This is a simplified way to get selected text.
-    -- It might not work for visual block mode.
+    -- This is a simplified way to get selected text from the last visual selection.
+    -- Note: This may not be perfectly accurate for all selection types,
+    -- such as visual block mode.
     local startPos = vim.fn.getpos("'<")
     local endPos = vim.fn.getpos("'>")
     if startPos[2] ~= 0 and endPos[2] ~= 0 then
@@ -125,10 +132,10 @@ function manager.getContext()
 end
 
 ---
--- Sets up the autocommands to track IDE events.
--- This function should be called once when the plugin is initialized.
--- It registers autocommands for buffer and cursor events to trigger updates.
--- @param onChangeCallback function A function to be called when the context changes.
+-- Sets up autocommands to track workspace events and keep the context updated.
+-- This should be called once during plugin initialization. It tracks buffer
+-- changes, cursor movements, and file deletions to trigger the onChangeCallback.
+-- @param onChangeCallback function A function to be called whenever the context changes.
 function manager.setup(onChangeCallback)
   -- Initial population
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
@@ -138,6 +145,7 @@ function manager.setup(onChangeCallback)
   local group =
     vim.api.nvim_create_augroup('GeminiIdeContextManager', { clear = true })
 
+  -- Track when the user enters a new buffer to mark it as active.
   vim.api.nvim_create_autocmd({ 'BufEnter', 'BufWinEnter' }, {
     group = group,
     pattern = '*',
@@ -152,6 +160,7 @@ function manager.setup(onChangeCallback)
     end,
   })
 
+  -- Track when a buffer is deleted to remove it from the open files list.
   vim.api.nvim_create_autocmd({ 'BufDelete' }, {
     group = group,
     pattern = '*',
@@ -172,6 +181,7 @@ function manager.setup(onChangeCallback)
     end,
   })
 
+  -- Track cursor movement to provide real-time context updates.
   vim.api.nvim_create_autocmd({ 'CursorMoved', 'CursorMovedI' }, {
     group = group,
     pattern = '*',

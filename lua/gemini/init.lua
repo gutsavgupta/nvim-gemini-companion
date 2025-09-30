@@ -10,6 +10,8 @@ local M = {}
 
 -- Defer loading of modules to speed up startup
 local ideMcpServer, ideCntxManager, ideDiffManager, ideSidebar
+-- Lazily loads the plugin's modules.
+-- This is done to improve Neovim's startup time by only loading the modules when they are first needed.
 local function load_modules()
   if ideMcpServer then return end
   ideMcpServer = require('gemini.ideMcpServer')
@@ -21,8 +23,9 @@ end
 local server = nil
 
 ---
--- Sends a JSON-RPC notification to the Gemini CLI.
--- @param method string The method name of the notification.
+-- Sends a JSON-RPC notification to the Gemini CLI via the MCP server.
+-- This is used for server-to-client communication without expecting a response.
+-- @param method string The method name of the notification (e.g., 'ide/contextUpdate').
 -- @param params table The parameters for the notification.
 local function sendMcpNotification(method, params)
   if server then
@@ -37,6 +40,11 @@ local function sendMcpNotification(method, params)
   end
 end
 
+-- Handles the 'initialize' request from the MCP client.
+-- This is the first request sent by the client to the server.
+-- It returns the server's capabilities and information.
+-- @param client table The client instance that sent the request.
+-- @param request table The JSON-RPC request object.
 local function handleInitialization(client, request)
   local responseTbl = {
     jsonrpc = '2.0',
@@ -54,6 +62,11 @@ local function handleInitialization(client, request)
   if client then client:send(responseTbl) end
 end
 
+-- Handles the 'initialized' notification from the MCP client.
+-- This notification is sent by the client after it has received the 'initialize' response.
+-- It indicates that the client is ready to receive notifications from the server.
+-- @param client table The client instance that sent the request.
+-- @param request table The JSON-RPC request object.
 local function handleInitialized(client, request)
   local responseTbl = { jsonrpc = '2.0', id = request.id, result = {} }
   if client then client:send(responseTbl) end
@@ -66,6 +79,11 @@ local function handleInitialized(client, request)
   )
 end
 
+-- Handles the 'tools/list' request from the MCP client.
+-- This request asks the server to provide a list of available tools.
+-- The server responds with a list of tools that the user can execute.
+-- @param client table The client instance that sent the request.
+-- @param request table The JSON-RPC request object.
 local function handleToolsList(client, request)
   local responseTbl = {
     jsonrpc = '2.0',
@@ -99,6 +117,10 @@ local function handleToolsList(client, request)
   if client then client:send(responseTbl) end
 end
 
+-- Handles the 'tools/call' request from the MCP client.
+-- This request asks the server to execute a specific tool with the given parameters.
+-- @param client table The client instance that sent the request.
+-- @param request table The JSON-RPC request object, containing the tool name and arguments.
 local function handleToolCall(client, request)
   local toolName = request.params.name
   local toolParams = request.params.arguments
@@ -164,7 +186,7 @@ end
 -- @param opts table Configuration options for the plugin.
 --   - width (number): Width of the sidebar.
 --   - command (string): The command to run for the Gemini CLI.
-function M.setup(opts) 
+function M.setup(opts)
   opts = opts or {}
   log.info('Setting up nvim-gemini-companion with options:', opts)
   load_modules()
