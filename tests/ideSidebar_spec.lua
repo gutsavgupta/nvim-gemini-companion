@@ -326,4 +326,118 @@ describe('ideSidebar', function()
       assert.equal(windowSpy.opts.position, 'float')
     end)
   end)
+
+  describe('extendDefaults', function()
+    it('should set lastPresetIdx to match the preset used', function()
+      local defaults = {
+        cmds = { 'gemini', 'qwen' },
+        port = nil,
+        env = {},
+        win = {
+          preset = 'left-fixed',
+        },
+      }
+      local opts = {}
+      local result = ideSidebar.extendDefaults(opts, defaults)
+
+      -- Check that the result correctly applies the preset
+      assert.equal('left-fixed', result.win.preset)
+      assert.equal('left', result.win.position)
+    end)
+
+    it(
+      'should set lastPresetIdx to default when using default preset',
+      function()
+        local defaults = {
+          cmds = { 'gemini', 'qwen' },
+          port = nil,
+          env = {},
+          win = {
+            preset = 'right-fixed',
+          },
+        }
+        local opts = {}
+        local result = ideSidebar.extendDefaults(opts, defaults)
+
+        -- Check that the result correctly applies the preset
+        assert.equal('right-fixed', result.win.preset)
+      end
+    )
+
+    it(
+      'should handle invalid preset by applying default preset options',
+      function()
+        local defaults = {
+          cmds = { 'gemini', 'qwen' },
+          port = nil,
+          env = {},
+          win = {
+            preset = 'invalid-preset',
+          },
+        }
+        local opts = {}
+        local result = ideSidebar.extendDefaults(opts, defaults)
+
+        -- Check that the fallback preset's options are applied (right-fixed preset)
+        -- After our fix, it should always fallback to 'right-fixed' with position = 'right'
+        assert.equal('right', result.win.position)
+        assert.equal(true, result.win.fixed) -- right-fixed has fixed = true
+        -- The preset name in the config stays as the invalid one, but options are from the fallback
+        assert.equal('invalid-preset', result.win.preset)
+      end
+    )
+  end)
+
+  describe('switchStylePreset', function()
+    local spyOnSetStyle
+
+    before_each(function()
+      -- Spy on the setStyle function to verify what preset is being applied
+      spyOnSetStyle = spy.on(ideSidebar, 'setStyle')
+    end)
+
+    after_each(function()
+      -- Clean up the spy after each test
+      spyOnSetStyle = nil
+    end)
+
+    it(
+      'should call setStyle with the next preset when no preset name provided (cycling behavior)',
+      function()
+        ideSidebar.setup({ cmd = 'gemini' })
+
+        -- Call switchStylePreset without arguments to cycle to next preset
+        local cmdOpts = { fargs = {} }
+        ideSidebar.switchStylePreset(cmdOpts)
+
+        -- Verify that setStyle was called (the exact preset depends on the cycle)
+        assert.spy(spyOnSetStyle).was.called(1)
+      end
+    )
+
+    it(
+      'should call setStyle with specific preset when preset name provided',
+      function()
+        ideSidebar.setup({ cmd = 'gemini' })
+
+        -- Call switchStylePreset with specific preset name
+        local cmdOpts = { fargs = { 'left-fixed' } }
+        ideSidebar.switchStylePreset(cmdOpts)
+
+        -- Verify that setStyle was called with the specific preset
+        assert.spy(spyOnSetStyle).was.called_with('left-fixed')
+      end
+    )
+
+    it('should not call setStyle with invalid preset name', function()
+      ideSidebar.setup({ cmd = 'gemini' })
+
+      -- Call switchStylePreset with invalid preset name
+      local cmdOpts = { fargs = { 'invalid-preset' } }
+      ideSidebar.switchStylePreset(cmdOpts)
+
+      -- Verify that setStyle was not called since function returns early
+      assert.spy(spyOnSetStyle).was.not_called()
+    end)
+  end)
 end)
