@@ -82,7 +82,7 @@ local function addOrMoveToFront(bufnr)
 
   -- Enforce max length
   if #state.openFiles > maxFiles then table.remove(state.openFiles) end
-}
+end
 
 ---
 -- Gathers and returns the complete IDE context for the Gemini CLI.
