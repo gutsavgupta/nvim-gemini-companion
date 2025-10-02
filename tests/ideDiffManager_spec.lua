@@ -85,7 +85,7 @@ describe('ideDiffManager', function()
     )
   end)
 
-it('should close the diff view and clean up views table', function()
+  it('should close the diff view and clean up views table', function()
     -- 1. Setup: Open a diff view first
     local tempFile = vim.fn.tempname()
     vim.fn.writefile({ 'line 1' }, tempFile)
@@ -226,7 +226,7 @@ it('should close the diff view and clean up views table', function()
 
   it('should set the correct filetype for the new content buffer', function()
     -- 1. Setup test data
-    local tempFile = vim.fn.tempname() .. ".lua"
+    local tempFile = vim.fn.tempname() .. '.lua'
     vim.fn.writefile({ 'local x = 1' }, tempFile)
     local newContent = 'local x = 2'
 
@@ -244,7 +244,11 @@ it('should close the diff view and clean up views table', function()
     local rightFiletype = vim.api.nvim_buf_get_option(rightBuf, 'filetype')
 
     assert.are.equal('lua', leftFiletype, 'Original filetype should be lua')
-    assert.are.equal(leftFiletype, rightFiletype, 'New content buffer should have the same filetype as the original')
+    assert.are.equal(
+      leftFiletype,
+      rightFiletype,
+      'New content buffer should have the same filetype as the original'
+    )
   end)
 
   describe('autocmd triggers', function()

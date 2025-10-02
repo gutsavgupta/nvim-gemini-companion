@@ -36,6 +36,6 @@ require('snacks').setup()
 require('gemini').setup({
   cmds = { 'gemini', 'qwen' },
   win = {
-    preset = 'floating',
+    preset = 'bottom-fixed',
   },
 })
