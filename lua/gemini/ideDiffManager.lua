@@ -32,6 +32,7 @@ function manager.open(filePath, newContent, onClose)
   vim.schedule(function()
     -- 1. Get filename and create the modified buffer name
     local filename = vim.fn.fnamemodify(filePath, ':t')
+    local filetype = vim.filetype.match({ filename = filePath })
     local modifiedBufName = filename .. ' <-> modified'
 
     -- If a buffer with the same name exists from a previous diff, delete it
@@ -51,31 +52,25 @@ function manager.open(filePath, newContent, onClose)
     )
     vim.api.nvim_buf_set_name(newBuf, modifiedBufName)
     -- Allow write commands but prevent actual file writes
-    vim.api.nvim_buf_set_option(newBuf, 'buftype', 'acwrite')
-    vim.api.nvim_buf_set_option(newBuf, 'bufhidden', 'hide')
+    vim.bo[newBuf].buftype = 'acwrite'
+    vim.bo[newBuf].bufhidden = 'hide'
+    vim.bo[newBuf].modified = false
+    vim.bo[newBuf].filetype = filetype or ''
 
-    -- 3. Open a new tab for the diff
-    vim.cmd('tabnew')
+    -- 3. Open a new tab for the diff with file
+    vim.cmd('tabnew ' .. filePath)
     local diffTab = vim.api.nvim_get_current_tabpage()
+    local originalWinDiff = vim.api.nvim_get_current_win()
+    local originalBuf = vim.api.nvim_win_get_buf(originalWinDiff)
 
     -- 4. Set options for the diff
     vim.cmd(
       'setlocal diffopt=internal,filler,closeoff,vertical,algorithm:patience'
     )
+    vim.cmd('diffthis')
     vim.cmd('set splitright') -- Ensure vsplit opens to the right
 
-    -- 5. Open original file in the left split
-    vim.cmd('edit ' .. filePath)
-    local originalWinDiff = vim.api.nvim_get_current_win()
-    local originalBuf = vim.api.nvim_win_get_buf(originalWinDiff)
-    local filetype = vim.api.nvim_buf_get_option(originalBuf, 'filetype')
-    vim.api.nvim_buf_set_option(originalBuf, 'readonly', true)
-    vim.cmd('diffthis')
-
-    -- Set filetype for the new buffer
-    vim.api.nvim_buf_set_option(newBuf, 'filetype', filetype)
-
-    -- 6. Open the new content in a vertical split on the right
+    -- 5. Open the new content in a vertical split on the right
     vim.cmd('vsplit')
     local newWinDiff = vim.api.nvim_get_current_win()
     vim.api.nvim_set_current_buf(newBuf)
@@ -108,7 +103,7 @@ function manager.open(filePath, newContent, onClose)
     local handleWriteCmd = function()
       local view = views[filePath]
       if view then view.diffAccepted = true end
-      vim.api.nvim_buf_set_option(view.newBuf, 'modified', false)
+      vim.bo[view.newBuf].modified = false
     end
 
     local handleQuit = function()
@@ -129,13 +124,13 @@ function manager.open(filePath, newContent, onClose)
     })
 
     -- Handle quit events to accept changes if the buffer was modified
-    vim.api.nvim_create_autocmd('BufWinLeave', {
+    vim.api.nvim_create_autocmd({ 'BufWinLeave' }, {
       group = augroup,
       buffer = newBuf,
       callback = handleQuit,
     })
 
-    vim.api.nvim_create_autocmd('BufWinLeave', {
+    vim.api.nvim_create_autocmd({ 'WinClosed' }, {
       group = augroup,
       buffer = originalBuf,
       callback = handleQuit,
@@ -169,19 +164,15 @@ local function closeView(filePath)
     content = table.concat(lines, '\n')
   end
 
-  -- delete the buffers
-  if view.originalBuf and vim.api.nvim_buf_is_valid(view.originalBuf) then
-    vim.api.nvim_buf_delete(view.originalBuf, { force = true })
-  end
-  if view.newBuf and vim.api.nvim_buf_is_valid(view.newBuf) then
-    vim.api.nvim_buf_delete(view.newBuf, { force = true })
-  end
-
   -- close the windows
   for _, winId in ipairs(view.winIds) do
     if vim.api.nvim_win_is_valid(winId) then
       vim.api.nvim_win_close(winId, true)
     end
+  end
+
+  if view.newBuf and vim.api.nvim_buf_is_valid(view.newBuf) then
+    vim.api.nvim_buf_delete(view.newBuf, { force = true })
   end
 
   views[filePath] = nil
