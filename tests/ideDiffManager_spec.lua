@@ -85,12 +85,15 @@ describe('ideDiffManager', function()
     )
   end)
 
-it('should close the diff view', function()
+it('should close the diff view and clean up views table', function()
     -- 1. Setup: Open a diff view first
     local tempFile = vim.fn.tempname()
     vim.fn.writefile({ 'line 1' }, tempFile)
     local newContent = 'line 1 changed'
     diffManager.open(tempFile, newContent)
+
+    -- Assert that the view exists before closing
+    assert.is_not_nil(diffManager.getView(tempFile))
 
     diffManager.close(tempFile)
 
@@ -100,6 +103,8 @@ it('should close the diff view', function()
       #vim.api.nvim_list_tabpages(),
       'Should have only one tab after close'
     )
+    -- Assert that the view is cleaned up
+    assert.is_nil(diffManager.getView(tempFile))
   end)
 
   it("should accept the diff and call onClose with 'accepted'", function()

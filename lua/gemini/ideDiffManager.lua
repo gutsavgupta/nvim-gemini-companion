@@ -169,6 +169,15 @@ local function closeView(filePath)
     content = table.concat(lines, '\n')
   end
 
+  -- delete the buffers
+  if view.originalBuf and vim.api.nvim_buf_is_valid(view.originalBuf) then
+    vim.api.nvim_buf_delete(view.originalBuf, { force = true })
+  end
+  if view.newBuf and vim.api.nvim_buf_is_valid(view.newBuf) then
+    vim.api.nvim_buf_delete(view.newBuf, { force = true })
+  end
+
+  -- close the windows
   for _, winId in ipairs(view.winIds) do
     if vim.api.nvim_win_is_valid(winId) then
       vim.api.nvim_win_close(winId, true)
@@ -240,6 +249,8 @@ function manager.getFilePathFromWindowID(winId)
   print('Not a Gemini diff buffer')
   return nil
 end
+
+function manager.getView(filePath) return views[filePath] end
 
 ---
 -- Sets up the user commands for interacting with the diff view.
