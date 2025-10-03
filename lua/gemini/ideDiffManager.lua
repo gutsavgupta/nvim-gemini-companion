@@ -50,7 +50,8 @@ function manager.open(filePath, newContent, onClose)
       vim.split(newContent, '\n')
     )
     vim.api.nvim_buf_set_name(newBuf, modifiedBufName)
-    vim.api.nvim_buf_set_option(newBuf, 'buftype', 'nofile')
+    -- Allow write commands but prevent actual file writes
+    vim.api.nvim_buf_set_option(newBuf, 'buftype', 'acwrite')
     vim.api.nvim_buf_set_option(newBuf, 'bufhidden', 'hide')
 
     -- 3. Open a new tab for the diff
@@ -68,6 +69,7 @@ function manager.open(filePath, newContent, onClose)
     local originalWinDiff = vim.api.nvim_get_current_win()
     local originalBuf = vim.api.nvim_win_get_buf(originalWinDiff)
     local filetype = vim.api.nvim_buf_get_option(originalBuf, 'filetype')
+    vim.api.nvim_buf_set_option(originalBuf, 'readonly', true)
     vim.cmd('diffthis')
 
     -- Set filetype for the new buffer
@@ -87,14 +89,63 @@ function manager.open(filePath, newContent, onClose)
     vim.api.nvim_set_option_value('winfixbuf', true, { win = originalWinDiff })
     vim.api.nvim_set_option_value('winfixbuf', true, { win = newWinDiff })
 
-    -- Store view info for closing later
+    -- Store view info for closing later (we need this before setting up autocommands)
     views[filePath] = {
       tabId = diffTab,
       winIds = { originalWinDiff, newWinDiff },
       originalBuf = vim.api.nvim_win_get_buf(originalWinDiff),
       newBuf = newBuf,
       onClose = onClose,
+      diffAccepted = false,
     }
+
+    -- Set up autocommands for the new buffer to handle :w and quit events
+    local augroup = vim.api.nvim_create_augroup(
+      'GeminiDiffManager_' .. newBuf,
+      { clear = true }
+    )
+
+    local handleWriteCmd = function()
+      local view = views[filePath]
+      if view then view.diffAccepted = true end
+      vim.api.nvim_buf_set_option(view.newBuf, 'modified', false)
+    end
+
+    local handleQuit = function()
+      local view = views[filePath]
+      if not view then return end
+      if view.diffAccepted then
+        vim.schedule(function() manager.accept(filePath) end)
+      else
+        vim.schedule(function() manager.reject(filePath) end)
+      end
+    end
+
+    -- Handle :w command on the newBuf to accept changes
+    vim.api.nvim_create_autocmd('BufWriteCmd', {
+      group = augroup,
+      buffer = newBuf,
+      callback = handleWriteCmd,
+    })
+
+    -- Handle quit events to accept changes if the buffer was modified
+    vim.api.nvim_create_autocmd('BufWinLeave', {
+      group = augroup,
+      buffer = newBuf,
+      callback = handleQuit,
+    })
+
+    vim.api.nvim_create_autocmd('BufWinLeave', {
+      group = augroup,
+      buffer = originalBuf,
+      callback = handleQuit,
+    })
+
+    -- Update the view with the augroup for proper cleanup later
+    local existing_view = views[filePath]
+    if existing_view then
+      existing_view.augroup = augroup -- Store the augroup to clean it up later
+    end
   end)
 end
 
@@ -108,6 +159,9 @@ end
 local function closeView(filePath)
   local view = views[filePath]
   if not view then return end
+
+  -- disable the augroup
+  if view.augroup then vim.api.nvim_del_augroup_by_id(view.augroup) end
 
   local content
   if view.newBuf and vim.api.nvim_buf_is_valid(view.newBuf) then
