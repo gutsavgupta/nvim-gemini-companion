@@ -14,7 +14,7 @@ https://github.com/user-attachments/assets/48324de2-1c7c-4a00-966a-23836aecd29e
 
 ## Features
 
-*   ✅ **Diff View:** Compare your local file with AI suggestions and accept/reject changes seamlessly
+*   ✅ **Diff Control:** Auto diff views, accept or reject suggestions directly from vim using `:wq` or `:q`.
 *   ✅ **CLI Agent:** Dedicated terminal session for interacting with AI agents
 *   ✅ **Multi-Agent Support:** Run both `gemini` and `qwen-code` agents simultaneously 
 *   ✅ **Tab-based Switching:** Effortlessly switch between AI terminals with `<Tab>`
@@ -76,6 +76,22 @@ The following options are available in the `setup` function:
     *   The plugin checks if the agent is installed in the system PATH and only enables it if found.
     *   If you want to use only one agent, you can set it as a single command string, e.g., `cmd = "gemini"`.
 *   `win`: This option configures the window for the Gemini sidebar. It respects the `snacks.win` options from the [`folke/snacks.nvim`](https://github.com/folke/snacks.nvim) library. For more information on the available options, please refer to the [snacks.win documentation](https://github.com/folke/snacks.nvim/blob/main/docs/win.md).
+
+### Accepting and Rejecting Diffs
+
+When a diff view is presented, you have multiple ways to handle the suggested changes:
+
+*   **Vim-style Commands:**
+    *   `:w` or `:wq`: Write the buffer to accept the changes.
+    *   `:q` or `:q!`: Quit the buffer without writing to reject the changes.
+    This behavior is inspired by `vim.pack`.
+
+*   **Plugin Commands:**
+    *   `:GeminiAccept`: Accept the changes.
+    *   `:GeminiReject`: Reject the changes.
+
+These commands provide flexibility in how you manage the diffs, allowing you to use the method you find most comfortable.
+
 
 ### Sidebar Presets
 
