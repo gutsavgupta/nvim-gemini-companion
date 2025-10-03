@@ -256,6 +256,7 @@ function terminal.new(id, command, config)
     buffer = self.buf,
     callback = function()
       local curWin = vim.api.nvim_get_current_win()
+      if self.win and curWin ~= self.win then return end
       for _, win in ipairs(vim.api.nvim_list_wins()) do
         if win ~= curWin then
           vim.api.nvim_set_current_win(win)
