@@ -13,13 +13,12 @@ local defaultConfig = {
       list = false, -- Disable showing whitespace characters
       cursorline = false, -- Disable highlighting current line
       fillchars = { eob = ' ' }, -- Fill end-of-buffer with spaces instead of ~
-    },
-    highlights = { -- Highlight groups for the terminal window
-      TermNormal = { link = 'NormalFloat' }, -- Terminal normal text
-      NormalFloat = { link = 'NormalFloat' }, -- Float window normal text
-      NormalNC = { link = 'NormalFloat' }, -- Normal text in non-current window
-      Normal = { link = 'NormalFloat' }, -- Normal text
-      Border = { link = 'FloatBorder' }, -- Border highlight
+      winhighlight = table.concat({
+        'Normal:TermNormal',
+        'NormalNC:TermNormal',
+        'NormalFloat:TermNormal',
+        'Border:FloatBorder',
+      }, ','),
     },
   },
   id = nil, -- Terminal identifier (required for management)
@@ -326,6 +325,7 @@ end
 
 -- Helper method to apply highlight configurations
 function terminal:applyHighlights()
+  if not self.config.extendedWin.highlights then return end
   for k, v in pairs(self.config.extendedWin.highlights) do
     pcall(function()
       if v.link then
