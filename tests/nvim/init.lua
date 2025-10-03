@@ -65,7 +65,7 @@ require('snacks').setup({})
 require('gemini').setup({
   cmd = 'no-cli',
   win = {
-    preset = 'bottom-fixed',
+    preset = 'floating',
   },
 })
 print('Test environment initialized successfully.')

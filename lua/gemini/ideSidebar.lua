@@ -262,7 +262,7 @@ function ideSidebar.setup(opts)
     port = nil,
     env = {},
     win = {
-      preset = 'right',
+      preset = 'right-fixed',
     },
   }
 
