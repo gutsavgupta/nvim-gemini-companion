@@ -241,4 +241,66 @@ it('should close the diff view', function()
     assert.are.equal('lua', leftFiletype, 'Original filetype should be lua')
     assert.are.equal(leftFiletype, rightFiletype, 'New content buffer should have the same filetype as the original')
   end)
+
+  describe('autocmd triggers', function()
+    it("should accept changes when ':wq' is used", function()
+      -- 1. Setup
+      local tempFile = vim.fn.tempname()
+      vim.fn.writefile({ 'line 1' }, tempFile)
+      local newContent = 'line 1 changed'
+      local onCloseSpy = spy.new(function() end)
+      diffManager.open(tempFile, newContent, onCloseSpy)
+
+      -- 2. Get the buffer of the modified buffer
+      local diffWins =
+        vim.api.nvim_tabpage_list_wins(vim.api.nvim_get_current_tabpage())
+      local rightBuf = vim.api.nvim_win_get_buf(diffWins[2])
+
+      -- 3. Simulate :wq command by triggering the autocmds
+      vim.api.nvim_exec_autocmds(
+        'BufWriteCmd',
+        { buffer = rightBuf, modeline = false }
+      )
+      vim.api.nvim_exec_autocmds(
+        'BufWinLeave',
+        { buffer = rightBuf, modeline = false }
+      )
+
+      -- 4. Assert
+      assert.spy(onCloseSpy).was.called_with(newContent, 'accepted')
+      assert.are.equal(
+        1,
+        #vim.api.nvim_list_tabpages(),
+        'Should have closed the diff tab'
+      )
+    end)
+
+    it("should reject changes when ':q' is used", function()
+      -- 1. Setup
+      local tempFile = vim.fn.tempname()
+      vim.fn.writefile({ 'line 1' }, tempFile)
+      local newContent = 'line 1 changed'
+      local onCloseSpy = spy.new(function() end)
+      diffManager.open(tempFile, newContent, onCloseSpy)
+
+      -- 2. Get the buffer of the modified buffer
+      local diffWins =
+        vim.api.nvim_tabpage_list_wins(vim.api.nvim_get_current_tabpage())
+      local rightBuf = vim.api.nvim_win_get_buf(diffWins[2])
+
+      -- 3. Simulate :q command by triggering the autocmd
+      vim.api.nvim_exec_autocmds(
+        'BufWinLeave',
+        { buffer = rightBuf, modeline = false }
+      )
+
+      -- 4. Assert
+      assert.spy(onCloseSpy).was.called_with(newContent, 'rejected')
+      assert.are.equal(
+        1,
+        #vim.api.nvim_list_tabpages(),
+        'Should have closed the diff tab'
+      )
+    end)
+  end)
 end)
