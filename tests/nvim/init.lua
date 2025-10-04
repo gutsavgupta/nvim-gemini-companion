@@ -63,6 +63,7 @@ vim.opt.backup = false
 -- =============================================================================
 require('snacks').setup({})
 require('gemini').setup({
+  cmd = 'no-cli',
   win = {
     preset = 'floating',
   },
