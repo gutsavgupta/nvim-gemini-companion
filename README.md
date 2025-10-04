@@ -4,9 +4,9 @@
 
 `nvim-gemini-companion` brings Gemini CLI + Qwen-Code directly into Neovim! 🚀 Enjoy diff views, agent management, and smart file modifications while keeping your workflow blazing fast. 🌟 Get 3000 free daily requests (1000 from Gemini + 2000 from Qwen) with their subscription-free model - no middleware needed!
 
-![Gemini](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/Gemini-20250928.png)
+![Gemini](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/main/assets/Gemini-20250928.png)
 -------
-![Qwen](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/dev/assets/Qwen-20250928.png)
+![Qwen](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/main/assets/Qwen-20250928.png)
 -------
 
 ## Demo
