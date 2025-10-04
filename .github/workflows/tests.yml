@@ -1,0 +1,25 @@
+name: Run Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Neovim
+        uses: neovim/nvim-setup@v1
+        with:
+          neovim_version: stable
+
+
+      - name: Run tests
+        run: |
+          XDG_CONFIG_HOME=$(pwd)/tests nvim --headless -l -c 'PlenaryBustedDirectory tests'
