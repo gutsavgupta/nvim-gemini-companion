@@ -14,12 +14,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Neovim
-        uses: MunifTanjim/setup-neovim-action@v1
+      - name: Setup Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true # Set to true to install Neovim
+          version: stable # Or 'nightly', or a specific version like 'v0.9.5'
       
       - name: Verify Neovim install 
         run: nvim --version
 
       - name: Run tests
-        run: |
-          XDG_CONFIG_HOME=$(pwd)/tests nvim --headless -l -c 'PlenaryBustedDirectory tests'
+        run: >
+          XDG_CONFIG_HOME=$(pwd)/tests nvim --headless
+          -c 'PlenaryBustedDirectory tests'
