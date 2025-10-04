@@ -32,6 +32,7 @@ function manager.open(filePath, newContent, onClose)
   vim.schedule(function()
     -- 1. Get filename and create the modified buffer name
     local filename = vim.fn.fnamemodify(filePath, ':t')
+    local filetype = vim.filetype.match({ filename = filePath })
     local modifiedBufName = filename .. ' <-> modified'
 
     -- If a buffer with the same name exists from a previous diff, delete it
@@ -50,30 +51,26 @@ function manager.open(filePath, newContent, onClose)
       vim.split(newContent, '\n')
     )
     vim.api.nvim_buf_set_name(newBuf, modifiedBufName)
-    vim.api.nvim_buf_set_option(newBuf, 'buftype', 'nofile')
-    vim.api.nvim_buf_set_option(newBuf, 'bufhidden', 'hide')
+    -- Allow write commands but prevent actual file writes
+    vim.bo[newBuf].buftype = 'acwrite'
+    vim.bo[newBuf].bufhidden = 'hide'
+    vim.bo[newBuf].modified = false
+    vim.bo[newBuf].filetype = filetype or ''
 
-    -- 3. Open a new tab for the diff
-    vim.cmd('tabnew')
+    -- 3. Open a new tab for the diff with file
+    vim.cmd('tabnew ' .. filePath)
     local diffTab = vim.api.nvim_get_current_tabpage()
+    local originalWinDiff = vim.api.nvim_get_current_win()
+    local originalBuf = vim.api.nvim_win_get_buf(originalWinDiff)
 
     -- 4. Set options for the diff
     vim.cmd(
       'setlocal diffopt=internal,filler,closeoff,vertical,algorithm:patience'
     )
+    vim.cmd('diffthis')
     vim.cmd('set splitright') -- Ensure vsplit opens to the right
 
-    -- 5. Open original file in the left split
-    vim.cmd('edit ' .. filePath)
-    local originalWinDiff = vim.api.nvim_get_current_win()
-    local originalBuf = vim.api.nvim_win_get_buf(originalWinDiff)
-    local filetype = vim.api.nvim_buf_get_option(originalBuf, 'filetype')
-    vim.cmd('diffthis')
-
-    -- Set filetype for the new buffer
-    vim.api.nvim_buf_set_option(newBuf, 'filetype', filetype)
-
-    -- 6. Open the new content in a vertical split on the right
+    -- 5. Open the new content in a vertical split on the right
     vim.cmd('vsplit')
     local newWinDiff = vim.api.nvim_get_current_win()
     vim.api.nvim_set_current_buf(newBuf)
@@ -87,14 +84,63 @@ function manager.open(filePath, newContent, onClose)
     vim.api.nvim_set_option_value('winfixbuf', true, { win = originalWinDiff })
     vim.api.nvim_set_option_value('winfixbuf', true, { win = newWinDiff })
 
-    -- Store view info for closing later
+    -- Store view info for closing later (we need this before setting up autocommands)
     views[filePath] = {
       tabId = diffTab,
       winIds = { originalWinDiff, newWinDiff },
       originalBuf = vim.api.nvim_win_get_buf(originalWinDiff),
       newBuf = newBuf,
       onClose = onClose,
+      diffAccepted = false,
     }
+
+    -- Set up autocommands for the new buffer to handle :w and quit events
+    local augroup = vim.api.nvim_create_augroup(
+      'GeminiDiffManager_' .. newBuf,
+      { clear = true }
+    )
+
+    local handleWriteCmd = function()
+      local view = views[filePath]
+      if view then view.diffAccepted = true end
+      vim.bo[view.newBuf].modified = false
+    end
+
+    local handleQuit = function()
+      local view = views[filePath]
+      if not view then return end
+      if view.diffAccepted then
+        vim.schedule(function() manager.accept(filePath) end)
+      else
+        vim.schedule(function() manager.reject(filePath) end)
+      end
+    end
+
+    -- Handle :w command on the newBuf to accept changes
+    vim.api.nvim_create_autocmd('BufWriteCmd', {
+      group = augroup,
+      buffer = newBuf,
+      callback = handleWriteCmd,
+    })
+
+    -- Handle quit events to accept changes if the buffer was modified
+    vim.api.nvim_create_autocmd({ 'BufWinLeave' }, {
+      group = augroup,
+      buffer = newBuf,
+      callback = handleQuit,
+    })
+
+    vim.api.nvim_create_autocmd({ 'WinClosed' }, {
+      group = augroup,
+      buffer = originalBuf,
+      callback = handleQuit,
+    })
+
+    -- Update the view with the augroup for proper cleanup later
+    local existing_view = views[filePath]
+    if existing_view then
+      existing_view.augroup = augroup -- Store the augroup to clean it up later
+    end
   end)
 end
 
@@ -109,16 +155,24 @@ local function closeView(filePath)
   local view = views[filePath]
   if not view then return end
 
+  -- disable the augroup
+  if view.augroup then vim.api.nvim_del_augroup_by_id(view.augroup) end
+
   local content
   if view.newBuf and vim.api.nvim_buf_is_valid(view.newBuf) then
     local lines = vim.api.nvim_buf_get_lines(view.newBuf, 0, -1, false)
     content = table.concat(lines, '\n')
   end
 
+  -- close the windows
   for _, winId in ipairs(view.winIds) do
     if vim.api.nvim_win_is_valid(winId) then
       vim.api.nvim_win_close(winId, true)
     end
+  end
+
+  if view.newBuf and vim.api.nvim_buf_is_valid(view.newBuf) then
+    vim.api.nvim_buf_delete(view.newBuf, { force = true })
   end
 
   views[filePath] = nil
@@ -186,6 +240,8 @@ function manager.getFilePathFromWindowID(winId)
   print('Not a Gemini diff buffer')
   return nil
 end
+
+function manager.getView(filePath) return views[filePath] end
 
 ---
 -- Sets up the user commands for interacting with the diff view.
