@@ -391,10 +391,10 @@ end
 -- @return string A deterministic ID string
 function ideSidebar.createDeterministicId(cmd, env, idx)
   local sortedEnv = sortTableRecursively(env)
-  local idStr = cmd .. ':' .. vim.inspect(
-    sortedEnv,
-    { newline = '', indent = '' }
-  ) .. (idx and ':' .. idx or '')
+  local idStr = cmd
+    .. ':'
+    .. vim.inspect(sortedEnv, { newline = '', indent = '' })
+    .. (idx and ':' .. idx or '')
   -- Replace whitespace and special characters with underscores
   -- to make it more deterministic, also replace subsequent underscores
   -- with a single underscore
