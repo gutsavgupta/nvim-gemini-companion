@@ -14,14 +14,19 @@ local defaultConfig = {
       cursorline = false, -- Disable highlighting current line
       fillchars = { eob = ' ' }, -- Fill end-of-buffer with spaces instead of ~
       winhighlight = table.concat({
-        'Normal:TermNormal',
-        'NormalNC:TermNormal',
-        'NormalFloat:TermNormal',
-        'Border:FloatBorder',
+        'Normal:NGCNormal',
+        'NormalNC:NGCNormalNC',
+        'Border:NGCFloatBorder',
       }, ','),
+    },
+    highlights = {
+      NGCNormal = { link = 'NormalFloat' },
+      NGCNormalMC = { link = 'NormalFloat' },
+      NGCFloatBorder = { link = 'FloatBorder' },
     },
   },
   id = nil, -- Terminal identifier (required for management)
+  name = nil,
 }
 
 -- Define available window layout presets
@@ -71,18 +76,26 @@ end
 
 -- Helper function to resize windows horizontally
 -- @param size The size to set (in characters or as a percentage of total lines)
+-- @param maxSize Maximum allowed size for the window
 local function hresize(size, maxSize)
   size = relativeToAbsolute(size, vim.o.lines)
   size = math.min(maxSize or vim.o.lines, size)
   vim.cmd('resize ' .. size)
+  -- Fix the window height to prevent other splits from resizing it
+  -- This ensures horizontal splits maintain their height when other windows are resized
+  vim.api.nvim_win_set_option(0, 'winfixheight', true)
 end
 
 -- Helper function to resize windows vertically
 -- @param size The size to set (in characters or as a percentage of total columns)
+-- @param maxSize Maximum allowed size for the window
 local function vresize(size, maxSize)
   size = relativeToAbsolute(size, vim.o.columns)
   size = math.min(maxSize or vim.o.columns, size)
   vim.cmd('vertical resize ' .. size)
+  -- Fix the window width to prevent other splits from resizing it
+  -- This ensures vertical splits maintain their width when other windows are resized
+  vim.api.nvim_win_set_option(0, 'winfixwidth', true)
 end
 
 ----------------------------------------------------------------
@@ -162,8 +175,8 @@ function terminal:show()
   end
 
   -- Apply window options and highlights
-  self:applyWindowOptions()
   self:applyHighlights()
+  self:applyWindowOptions()
 
   -- Enter insert mode to allow typing in the terminal
   ::continue::
@@ -321,6 +334,13 @@ function terminal:applyWindowOptions()
   for k, v in pairs(self.config.extendedWin.wo) do
     pcall(function() vim.wo[self.win][k] = v end)
   end
+
+  -- Set winbar to display "Agent: command" (max 20 chars), Left-aligned
+  local cmdName = self.config.name or (self.cmd or vim.o.shell)
+  local truncatedTitle = string.len(cmdName) > 20
+      and string.sub(cmdName, 1, 17) .. '...'
+    or cmdName
+  vim.wo[self.win].winbar = truncatedTitle .. '%=' -- Left-aligned with %=
 end
 
 -- Helper method to apply highlight configurations

@@ -4,7 +4,7 @@
 -- configuring the sidebar terminal.
 local log = require('plenary.log').new({
   plugin = 'nvim-gemini-companion',
-  level = os.getenv('NGC_LOG_LEVEL') or 'warn',
+  level = os.getenv('NGC_LOG_LEVEL') or 'debug',
 })
 
 ----------------------------------------------------------------
@@ -35,7 +35,7 @@ local function getPresetIdx(presetName)
     string.format(
       'Invalid sidebar style preset: %s, falling back to %s',
       presetName,
-      'right'
+      'right-fixed'
     )
   )
   return ideSidebarState.rightPresetIdx
@@ -264,6 +264,7 @@ function ideSidebar.setup(opts)
     win = {
       preset = 'right-fixed',
     },
+    name = nil,
   }
 
   for i, key in ipairs(presetKeys) do
@@ -278,10 +279,11 @@ function ideSidebar.setup(opts)
   -------------------------------------------------------
   opts = vim.tbl_deep_extend('force', defaults, opts)
   if opts.cmd then opts.cmds = { opts.cmd } end
-  for _, cmd in ipairs(opts.cmds) do
+  for idx, cmd in ipairs(opts.cmds) do
     local termOpts =
       vim.tbl_deep_extend('force', vim.deepcopy(opts), { cmd = cmd })
     local onBuffer = termOpts.on_buf
+    termOpts.name = string.format('Agent %d: %s', idx, cmd)
     termOpts.env.TERM_PROGRAM = 'vscode'
     if string.find(termOpts.cmd, 'qwen') then
       if termOpts.cmd == 'qwen' and vim.fn.executable('qwen') == 0 then
