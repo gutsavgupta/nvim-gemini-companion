@@ -191,6 +191,17 @@ function M.setup(opts)
   log.info('Setting up nvim-gemini-companion with options:', opts)
   load_modules()
 
+  -- Show v0.5 release announcement about dependency removal and new features
+  local util = require('gemini.util')
+  util.showOneTimeAnnouncement(
+    'v0.5_release_announcement',
+    'nvim-gemini-companion v0.5',
+    '🎉 Great news! nvim-gemini-companion is now dependency-free! '
+      .. "We've removed the folke/snacks.nvim dependency while adding support for "
+      .. 'multiple agent instances (Gemini & Qwen). Enjoy standalone functionality '
+      .. 'with enhanced multi-agent capabilities!'
+  )
+
   -- 1. Start MCP server
   server = ideMcpServer.new({
     onClientRequest = handleMcpRequest,
