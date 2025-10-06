@@ -35,9 +35,21 @@ local function markAnnouncementSeen(announcement_key)
     .. '.txt'
   local f = io.open(announcement_file, 'w')
   if f then
-    f:write(os.date())
+    f:write(string.format('%s\n', os.date())) -- Use a specific format to ensure string type
     io.close(f)
   end
+end
+
+--- Read content from a file
+-- @param file_path string: Path to the file to read
+-- @return string: Content of the file or empty string if error
+local function readFileContent(file_path)
+  local f = io.open(file_path, 'r')
+  if not f then return '' end
+
+  local content = f:read('*a')
+  f:close()
+  return content
 end
 
 --- Create a markdown floating window for announcements
@@ -45,10 +57,10 @@ end
 local function showAnnouncementAsFloatingWindow(content)
   -- Create a scratch buffer for the announcement
   local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
-  vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
-  vim.api.nvim_buf_set_option(buf, 'buflisted', false)
-  vim.api.nvim_buf_set_option(buf, 'filetype', 'markdown')
+  vim.bo[buf].buftype = 'nofile'
+  vim.bo[buf].bufhidden = 'wipe'
+  vim.bo[buf].buflisted = false
+  vim.bo[buf].filetype = 'markdown'
 
   -- Set the content
   local lines = {}
@@ -78,12 +90,9 @@ local function showAnnouncementAsFloatingWindow(content)
   })
 
   -- Set window options
-  vim.api.nvim_win_set_option(
-    win,
-    'winhighlight',
-    'Normal:Normal,FloatBorder:FloatBorder'
-  )
-  vim.api.nvim_buf_set_option(buf, 'modifiable', false)
+  vim.wo[win].winhighlight =
+    'Normal:NormalFloat,NormalNC:NormalFloat,FloatBorder:FloatBorder'
+  vim.bo[buf].modifiable = false
 
   -- Add close keymap (q or Esc)
   vim.api.nvim_buf_set_keymap(
@@ -112,17 +121,20 @@ local function showAnnouncementAsFloatingWindow(content)
   })
 
   -- Set the window to be read-only
-  vim.api.nvim_buf_set_option(buf, 'modifiable', false)
+  vim.bo[buf].modifiable = false
 end
 
 --- Show a one-time announcement to users in a floating markdown window
 -- @param announcement_key string: Unique identifier for the announcement
--- @param content string: Markdown content for the announcement
-M.showOneTimeAnnouncement = function(announcement_key, content)
+-- @param file_path string: Path to the markdown file containing the announcement
+M.showOneTimeAnnouncement = function(announcement_key, file_path)
   if not hasSeenAnnouncement(announcement_key) then
-    markAnnouncementSeen(announcement_key)
-    -- Schedule the announcement to show after the UI is ready
-    vim.schedule(function() showAnnouncementAsFloatingWindow(content) end)
+    local content = readFileContent(file_path)
+    if content ~= '' then
+      markAnnouncementSeen(announcement_key)
+      -- Schedule the announcement to show after the UI is ready
+      vim.schedule(function() showAnnouncementAsFloatingWindow(content) end)
+    end
   end
 end
 

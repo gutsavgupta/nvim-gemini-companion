@@ -114,8 +114,8 @@ describe('ideSidebar', function()
       -- Setup the sidebar first to create the terminal options
       ideSidebar.setup({ cmd = cmd, port = 12345 })
 
-      -- Create a mock terminal with the expected ID
-      local expectedId = ideSidebar.createDeterministicId(cmd, env)
+      -- Create a mock terminal with the expected ID (with idx = 1 for single command)
+      local expectedId = ideSidebar.createDeterministicId(cmd, env, 1)
       local mockTerm = {
         toggle = spy.new(function() end),
       }
@@ -146,8 +146,8 @@ describe('ideSidebar', function()
       -- Setup the sidebar first to create the terminal options
       ideSidebar.setup({ cmd = cmd, port = 12345 })
 
-      -- Create a mock terminal with exit method
-      local expectedId = ideSidebar.createDeterministicId(cmd, env)
+      -- Create a mock terminal with exit method (with idx = 1 for single command)
+      local expectedId = ideSidebar.createDeterministicId(cmd, env, 1)
       local mockTerm = {
         exit = spy.new(function() end),
       }
@@ -245,7 +245,7 @@ describe('ideSidebar', function()
         GEMINI_CLI_IDE_SERVER_PORT = '12345',
         TERM_PROGRAM = 'vscode',
       }
-      local expectedId = ideSidebar.createDeterministicId(cmd, env)
+      local expectedId = ideSidebar.createDeterministicId(cmd, env, 1)
 
       local mockTerm = {
         hide = spy.new(function() end),
@@ -273,7 +273,7 @@ describe('ideSidebar', function()
         GEMINI_CLI_IDE_SERVER_PORT = '12345',
         TERM_PROGRAM = 'vscode',
       }
-      local expectedId = ideSidebar.createDeterministicId(cmd, env)
+      local expectedId = ideSidebar.createDeterministicId(cmd, env, 1)
 
       local mockTerm = {
         hide = spy.new(function() end),
