@@ -193,15 +193,18 @@ function M.setup(opts)
 
   -- Show v0.5 release announcement about dependency removal and new features
   local util = require('gemini.util')
+  local announcement_content = '# nvim-gemini-companion v0.5 Release\n\n'
+    .. '## Features\n\n'
+    .. "1. **Dependency-Free**: We've removed the folke/snacks.nvim dependency! The plugin is now standalone.\n"
+    .. '2. **Multi-Agent Support**: Added support for multiple agent instances (Gemini & Qwen).\n'
+    .. '3. **Vim Commands for Diffs**: Use `:wq` and `:q` in diff views to accept/reject changes (inspired by vim.pack).\n\n'
+    .. '## Important Fixes\n\n'
+    .. "1. **No More Stale Buffers**: Fixed the issue with '[No Name]' buffers appearing after every diff operation.\n"
+    .. '2. **Proper Server Cleanup**: Fixed server not closing properly on VimLeave events.'
   util.showOneTimeAnnouncement(
     'v0.5_release_announcement',
-    'nvim-gemini-companion v0.5',
-    '🎉 Great news! nvim-gemini-companion is now dependency-free! '
-      .. "We've removed the folke/snacks.nvim dependency while adding support for "
-      .. 'multiple agent instances (Gemini & Qwen). Enjoy standalone functionality '
-      .. 'with enhanced multi-agent capabilities!'
+    announcement_content
   )
-
   -- 1. Start MCP server
   server = ideMcpServer.new({
     onClientRequest = handleMcpRequest,
