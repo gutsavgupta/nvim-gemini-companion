@@ -75,6 +75,20 @@ The following options are available in the `setup` function:
     *   If you want to use only one agent, you can set it as a single command string, e.g., `cmd = "gemini"`.
 *   `win`: This option configures the window for the sidebar. 
 
+## Commands
+
+The plugin provides the following commands:
+
+*   `:GeminiToggle` - Toggle the Gemini sidebar
+*   `:GeminiClose` - Close the Gemini CLI process
+*   `:GeminiSendFileDiagnostic` - Send file diagnostics to AI agent
+*   `:GeminiSendLineDiagnostic` - Send line diagnostics to AI agent 
+*   `:GeminiSwitchSidebarStyle` - Switch between sidebar styles
+*   `:GeminiSend [text]` - Send (if selected) text to AI agent (in visual mode)
+*   `:GeminiAccept` - Accept changes in diff view
+*   `:GeminiReject` - Reject changes in diff view
+*   `:GeminiAnnouncement [arg]` - Show plugin announcements; if no argument is provided, shows the latest announcement; if an argument is provided, shows the specific announcement version (e.g., `:GeminiAnnouncement v0.5_release`)
+
 ### Accepting and Rejecting Diffs
 
 When a diff view is presented, you have multiple ways to handle the suggested changes:
