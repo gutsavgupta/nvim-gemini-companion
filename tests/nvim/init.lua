@@ -31,10 +31,6 @@ local dependencies = {
     name = 'plenary.nvim',
     url = 'https://github.com/nvim-lua/plenary.nvim.git',
   },
-  {
-    name = 'snacks.nvim',
-    url = 'https://github.com/folke/snacks.nvim.git',
-  },
 }
 
 for _, dep in ipairs(dependencies) do
@@ -61,7 +57,6 @@ vim.opt.backup = false
 -- =============================================================================
 -- Gemini Plugin Setup
 -- =============================================================================
-require('snacks').setup({})
 require('gemini').setup({
   cmd = 'no-cli',
   win = {
@@ -69,4 +64,3 @@ require('gemini').setup({
   },
 })
 print('Test environment initialized successfully.')
-

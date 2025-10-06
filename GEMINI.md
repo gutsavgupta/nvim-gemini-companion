@@ -17,6 +17,7 @@ This file outlines the project structure and coding guidelines for the `nvim-gem
 *   **Modern Lua:** Keep Lua modules modern and isolated. Use `require` for dependencies and avoid global variables.
 *   **No License Headers:** Do not add license headers to new files to keep them simple and minimal.
 *   **Function Documentation:** Add a comment on top of each function describing its inputs, outputs, and intent. Keep these comments updated when the function's interface or implementation changes.
+*   **Line Length:** Keep comments and code within 100 columns for better readability. Break long lines as needed.
 
 ## Commit Messages
 

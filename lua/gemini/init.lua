@@ -9,15 +9,22 @@ local log = require('plenary.log').new({
 local M = {}
 
 -- Defer loading of modules to speed up startup
-local ideMcpServer, ideCntxManager, ideDiffManager, ideSidebar
+local ideMcpServer
+local ideCntxManager
+local ideDiffManager
+local ideSidebar
+local announcement
+
 -- Lazily loads the plugin's modules.
--- This is done to improve Neovim's startup time by only loading the modules when they are first needed.
+-- This is done to improve Neovim's startup time by only
+-- loading the modules when they are first needed.
 local function load_modules()
   if ideMcpServer then return end
   ideMcpServer = require('gemini.ideMcpServer')
   ideCntxManager = require('gemini.ideCntxManager')
   ideDiffManager = require('gemini.ideDiffManager')
   ideSidebar = require('gemini.ideSidebar')
+  announcement = require('gemini.announce')
 end
 
 local server = nil
@@ -221,6 +228,9 @@ function M.setup(opts)
 
   -- 4. Setup diff manager
   ideDiffManager.setup()
+
+  -- 5. Setup announcement
+  announcement.setup()
 
   log.info('nvim-gemini-companion setup complete.')
 end
