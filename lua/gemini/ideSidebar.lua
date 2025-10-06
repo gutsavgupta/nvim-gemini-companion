@@ -4,7 +4,7 @@
 -- configuring the sidebar terminal.
 local log = require('plenary.log').new({
   plugin = 'nvim-gemini-companion',
-  level = os.getenv('NGC_LOG_LEVEL') or 'debug',
+  level = os.getenv('NGC_LOG_LEVEL') or 'warn',
 })
 
 ----------------------------------------------------------------
@@ -301,7 +301,8 @@ function ideSidebar.setup(opts)
       termOpts.env.GEMINI_CLI_IDE_SERVER_PORT = tostring(termOpts.port)
     end
     -- Use the public deterministic ID creation method
-    termOpts.id = ideSidebar.createDeterministicId(termOpts.cmd, termOpts.env)
+    termOpts.id =
+      ideSidebar.createDeterministicId(termOpts.cmd, termOpts.env, idx)
 
     if #opts.cmds > 1 then
       termOpts.on_buf = function(buf)
@@ -388,11 +389,12 @@ end
 -- @param cmd string The command name
 -- @param env table The environment table
 -- @return string A deterministic ID string
-function ideSidebar.createDeterministicId(cmd, env)
+function ideSidebar.createDeterministicId(cmd, env, idx)
   local sortedEnv = sortTableRecursively(env)
-  local idStr = cmd
-    .. ':'
-    .. vim.inspect(sortedEnv, { newline = '', indent = '' })
+  local idStr = cmd .. ':' .. vim.inspect(
+    sortedEnv,
+    { newline = '', indent = '' }
+  ) .. (idx and ':' .. idx or '')
   -- Replace whitespace and special characters with underscores
   -- to make it more deterministic, also replace subsequent underscores
   -- with a single underscore
