@@ -58,7 +58,7 @@ vim.opt.backup = false
 -- Gemini Plugin Setup
 -- =============================================================================
 require('gemini').setup({
-  --cmd = 'no-cli',
+  cmd = 'no-cli',
   win = {
     preset = 'floating',
   },
