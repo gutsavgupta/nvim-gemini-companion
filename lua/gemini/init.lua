@@ -149,6 +149,30 @@ local function handleToolCall(client, request)
             filePath = toolParams.filePath,
             content = finalContent,
           })
+
+          -- auto reload
+          vim.defer_fn(function()
+            vim.schedule(function()
+              -- find all unchanged buffers with the same path
+              for _, bufInfo in ipairs(vim.fn.getbufinfo({ buflisted = true })) do
+                if bufInfo.name == toolParams.filePath then
+                  if bufInfo.changed == 0 then
+                    if #bufInfo.windows > 0 then
+                      -- if buf visable
+                      vim.fn.win_execute(bufInfo.windows[1], 'edit!')
+                    else
+                      -- else buf in backend
+                      local lines = vim.fn.readfile(bufInfo.name)
+                      vim.api.nvim_buf_set_lines(bufInfo.bufnr, 0, -1, false, lines)
+                      vim.api.nvim_buf_set_option(bufInfo.bufnr, 'modified', false)
+                    end
+                  else
+                    vim.notify('Skipped reload due to unsaved changes: ' .. bufInfo.name, vim.log.levels.INFO)
+                  end
+                end
+              end
+            end)
+          end, 200) -- wait 200ms to make sure the changes are applied
         elseif status == 'rejected' then
           sendMcpNotification('ide/diffClosed', {
             filePath = toolParams.filePath,
