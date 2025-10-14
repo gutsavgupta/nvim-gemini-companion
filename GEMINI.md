@@ -6,6 +6,7 @@ This file outlines the project structure and coding guidelines for the `nvim-gem
 
 *   `lua/`: Contains the Lua modules for the plugin.
 *   `tests/`: Contains the test files for the plugin.
+*   `lua/gemini/announcements/`: Release announcement markdown files shown to users on updates.
 *   `README.md`: The main documentation for the plugin.
 
 ## Coding Guidelines

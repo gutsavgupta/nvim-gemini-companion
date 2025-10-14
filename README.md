@@ -130,18 +130,19 @@ You can also cycle through presets on the fly using the `GeminiSwitchSidebarStyl
 
 ## For Developers: Running Tests
 
-To run the tests, you'll need to have `plenary.nvim` available. The test setup assumes a standard `lazy.nvim` directory structure.
-
-Execute the following command from the root of the repository:
+To run the tests, execute the following command from the root of the repository:
 
 ```bash
-XDG_CONFIG_HOME=$(pwd)/tests nvim --headless -c "PlenaryBustedDirectory tests"
+XDG_CONFIG_HOME=./tests nvim --headless -c "PlenaryBustedDirectory tests"
 ```
 This command will run all tests in the `tests` directory. To test a single file, use: `-c "PlenaryBustedFile tests/ideMcpServer_spec.lua"`
 
+The test setup includes automatic dependency management and will install `plenary.nvim` as needed.
+
 ### Important Notes
 
-*   The test environment requires `plenary.nvim`. The test configuration file (`tests/nvim/init.lua`) assumes this plugin is located at `~/.local/share/nvim/lazy/plenary.nvim`. If your setup is different, you may need to adjust this path.
+*   The test configuration now supports the `GEMINI_TEST_CMDS` environment variable to specify commands for testing (comma-separated), defaulting to `{'no-cli'}`.
+
 
 ## Roadmap
 
