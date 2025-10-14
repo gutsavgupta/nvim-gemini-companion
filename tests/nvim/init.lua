@@ -57,8 +57,13 @@ vim.opt.backup = false
 -- =============================================================================
 -- Gemini Plugin Setup
 -- =============================================================================
+-- Use GEMINI_CMDS environment variable to specify commands (comma-separated), default to {'no-cli'}
+-- Example: GEMINI_TEST_CMDS="gemini,qwen" to configure cmds = {'gemini', 'qwen'}
+local geminiEnv = os.getenv('GEMINI_TEST_CMDS')
+local geminiCmds = geminiEnv and vim.fn.split(geminiEnv, ',') or { 'no-cli' }
+
 require('gemini').setup({
-  cmd = 'no-cli',
+  cmds = geminiCmds,
   win = {
     preset = 'floating',
   },

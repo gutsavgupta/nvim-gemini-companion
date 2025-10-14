@@ -129,6 +129,17 @@ end
 -- @param client table The client instance that sent the request.
 -- @param request table The JSON-RPC request object, containing the tool name and arguments.
 local function handleToolCall(client, request)
+  local reloadFunction = function(filePath)
+    vim.defer_fn(function()
+      for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+        local bufname = vim.api.nvim_buf_get_name(buf)
+        if bufname == filePath then
+          vim.api.nvim_buf_call(buf, function() vim.cmd('checktime') end)
+        end
+      end
+    end, 200)
+  end
+
   local toolName = request.params.name
   local toolParams = request.params.arguments
   local responseTbl = {
@@ -149,40 +160,18 @@ local function handleToolCall(client, request)
             filePath = toolParams.filePath,
             content = finalContent,
           })
-
-          -- auto reload
-          vim.defer_fn(function()
-            vim.schedule(function()
-              -- find all unchanged buffers with the same path
-              for _, bufInfo in ipairs(vim.fn.getbufinfo({ buflisted = true })) do
-                if bufInfo.name == toolParams.filePath then
-                  if bufInfo.changed == 0 then
-                    if #bufInfo.windows > 0 then
-                      -- if buf visable
-                      vim.fn.win_execute(bufInfo.windows[1], 'edit!')
-                    else
-                      -- else buf in backend
-                      local lines = vim.fn.readfile(bufInfo.name)
-                      vim.api.nvim_buf_set_lines(bufInfo.bufnr, 0, -1, false, lines)
-                      vim.api.nvim_buf_set_option(bufInfo.bufnr, 'modified', false)
-                    end
-                  else
-                    vim.notify('Skipped reload due to unsaved changes: ' .. bufInfo.name, vim.log.levels.INFO)
-                  end
-                end
-              end
-            end)
-          end, 200) -- wait 200ms to make sure the changes are applied
         elseif status == 'rejected' then
           sendMcpNotification('ide/diffClosed', {
             filePath = toolParams.filePath,
           })
         end
+        reloadFunction(toolParams.filePath)
       end
     )
   elseif toolName == 'closeDiff' then
     local finalContent = ideDiffManager.close(toolParams.filePath)
     responseTbl.result.content[1].text = finalContent
+    reloadFunction(toolParams.filePath)
   else
     log.warn('Unhandled tool call:', toolName)
     if client then client:close() end
@@ -217,6 +206,7 @@ end
 -- @param opts table Configuration options for the plugin.
 --   - width (number): Width of the sidebar.
 --   - command (string): The command to run for the Gemini CLI.
+--   - autoRead (boolean): Enable automatic file reading when changed outside of Neovim (default: true).
 function M.setup(opts)
   opts = opts or {}
   log.info('Setting up nvim-gemini-companion with options:', opts)
@@ -256,7 +246,48 @@ function M.setup(opts)
   -- 5. Setup announcement
   announcement.setup()
 
+  -- 6. Setup autoread functionality (enabled by default unless explicitly disabled)
+  if opts.autoRead ~= false then M.enableAutoread() end
+
   log.info('nvim-gemini-companion setup complete.')
+end
+
+---
+-- Enables autoread functionality to automatically read files when changed outside of Neovim.
+function M.enableAutoread()
+  if M.autoreadAucmd then
+    -- Autoread is already enabled, just return
+    return
+  end
+
+  vim.opt.autoread = true
+  M.autoreadAucmd = vim.api.nvim_create_autocmd(
+    { 'BufEnter', 'WinEnter', 'FocusGained' },
+    {
+      pattern = '*',
+      callback = function()
+        -- When a file is changed outside of Neovim, check if the buffer should be reloaded
+        local currentFile = vim.fn.expand('%:p')
+        if currentFile ~= '' then
+          vim.cmd('checktime') -- Check if file has been modified and reload if needed
+        end
+      end,
+    }
+  )
+
+  log.info('Autoread enabled')
+end
+
+---
+-- Disables autoread functionality.
+function M.disableAutoread()
+  if M.autoreadAucmd then
+    vim.api.nvim_del_autocmd(M.autoreadAucmd)
+    M.autoreadAucmd = nil
+  end
+
+  vim.opt.autoread = false
+  log.info('Autoread disabled')
 end
 
 return M
