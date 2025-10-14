@@ -89,6 +89,7 @@ local function showAnnouncementAsFloatingWindow(content)
   -- Set window options
   vim.wo[win].winhighlight =
     'Normal:NormalFloat,NormalNC:NormalFloat,FloatBorder:FloatBorder'
+  vim.wo[win].wrap = true
   vim.bo[buf].modifiable = false
 
   -- Add close keymap (q or Esc)
