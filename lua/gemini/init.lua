@@ -15,6 +15,8 @@ local ideCntxManager
 local ideDiffManager
 local ideSidebar
 local announcement
+local installer
+local health
 
 -- Lazily loads the plugin's modules.
 -- This is done to improve Neovim's startup time by only
@@ -26,6 +28,8 @@ local function load_modules()
   ideDiffManager = require('gemini.ideDiffManager')
   ideSidebar = require('gemini.ideSidebar')
   announcement = require('gemini.announce')
+  installer = require('gemini.installer')
+  health = require('gemini.health')
 end
 
 local server = nil
@@ -203,6 +207,23 @@ local function handleMcpRequest(client, request)
   end
 end
 
+---
+-- Creates a connection file containing the server port and workspace information.
+-- This file is used by external CLIs to connect to the MCP server.
+-- @param port number The port number of the MCP server.
+-- @return string The path to the connection file that was created.
+local function createConnectionFile(port)
+  local pid = vim.fn.getpid()
+  local connFile = string.format('/tmp/nvim-gemini-companion-%d.json', pid)
+  local connInfo = {
+    port = port,
+    workspace = vim.fn.getcwd(),
+  }
+  vim.fn.writefile({ vim.fn.json_encode(connInfo) }, connFile)
+  log.info(string.format('Connection file: %s', connFile))
+  return connFile
+end
+
 --- Sets up the plugin. This should be called from the user's Neovim config.
 -- @param opts table Configuration options for the plugin.
 --   - width (number): Width of the sidebar.
@@ -230,10 +251,15 @@ function M.setup(opts)
   local port = server:start(0) -- Listen on a random port
   log.info('MCP Server started on port: ' .. port)
   opts.port = port
+
+  -- Create connection file for external CLIs
+  local connFile = createConnectionFile(port)
+
   vim.api.nvim_create_autocmd('VimLeave', {
     pattern = '*',
     callback = function()
       if server then server:close() end
+      pcall(vim.fn.delete, connFile) -- Clean up connection file
     end,
   })
 
@@ -259,6 +285,11 @@ function M.setup(opts)
   -- 6. Setup autoread functionality (enabled by default unless explicitly disabled)
   if opts.autoRead ~= false then M.enableAutoread() end
 
+  -- 7. Setup Installer
+  installer.setup()
+  health.setInstaller(installer)
+
+  -- Done
   log.info('nvim-gemini-companion setup complete.')
 end
 

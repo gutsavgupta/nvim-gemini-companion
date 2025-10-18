@@ -23,6 +23,7 @@ https://github.com/user-attachments/assets/48324de2-1c7c-4a00-966a-23836aecd29e
 *   ✅ **Send Selection:** Send selected text + prompt directly to AI agents using `:GeminiSend` command
 *   ✅ **Switchable Sidebar:** Choose between `right-fixed`, `left-fixed`, `bottom-fixed`, or `floating` styles
 *   ✅ **Highly Customizable:** Configure commands, window styles, and key bindings to your liking
+*   ✅ **Tmux Integration:** Connect `gemini` and `qwen` CLIs to Neovim from a Tmux session.
 
 ## Prerequisites
 
@@ -127,6 +128,51 @@ require("gemini").setup({
 ```
 
 You can also cycle through presets on the fly using the `GeminiSwitchSidebarStyle` command to find the one that best suits your needs.
+
+### Health Check
+
+The plugin includes a health check to help you diagnose issues with your setup. It verifies:
+*   The status of the background IDE server.
+*   The detection of `gemini` and `qwen` binaries in your `PATH`.
+*   The installation status of the CLI integration wrappers.
+
+To run the health check, use the following command in Neovim:
+
+```
+:checkhealth gemini
+```
+
+### Tmux Integration
+
+Connect the `gemini` and `qwen` CLIs to your running Neovim instance directly from a terminal within a **Tmux** window. This allows the CLIs to seamlessly open files, apply diffs, and interact with your editor.
+
+**Installation**
+
+To enable this integration, you need to install wrapper scripts. The plugin provides commands to do this automatically.
+
+1.  **Install the wrappers:**
+    ```
+    :GeminiInstallMuxWrappers
+    ```
+    This command will create wrapper scripts in `~/.local/bin` by default.
+
+2.  **Ensure `~/.local/bin` is in your `PATH`:**
+    For the wrappers to be used, the installation directory must be in your shell's `PATH`. Make sure you add it to your `.bashrc`, `.zshrc`, or other shell configuration file.
+
+    ```sh
+    export PATH="$HOME/.local/bin:$PATH"
+    ```
+
+**How it Works**
+
+The installer creates scripts that intercept calls to `gemini` and `qwen`. When you run these commands from a Tmux pane, the script looks for a running Neovim instance. If found, it connects to the plugin's server; otherwise, it runs the original CLI command as a fallback.
+
+**Uninstallation**
+
+To remove the wrapper scripts, you can run:
+```
+:GeminiRemoveMuxWrappers
+```
 
 ## For Developers: Running Tests
 
