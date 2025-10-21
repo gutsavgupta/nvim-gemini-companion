@@ -186,4 +186,74 @@ describe('ideMcpServer', function()
     -- Verify that the server is actually closed by trying to start a new one on the same port
     -- This is a functional verification that the close worked properly
   end)
+
+  it('should send error json to streaming clients on close', function()
+    -- Create a new server to test streaming client close behavior
+    local callbacks = {
+      onClientRequest = onClientRequestSpy,
+      onClientClose = onClientCloseSpy,
+    }
+    local testServer = IdeMcpServer.new(callbacks)
+    local testPort = testServer:start(0)
+
+    -- Connect as a streaming client (GET request) and set up data capture
+    local client = vim.uv.new_tcp()
+    local connected = false
+    local responseBuffer = ''
+    local additionalDataReceived = false
+
+    client:connect('127.0.0.1', testPort, function(err)
+      assert.is_nil(err)
+      connected = true
+      local request = table.concat({
+        'GET /mcp HTTP/1.1',
+        'Host: 127.0.0.1',
+        '\r\n',
+      }, '\r\n')
+      client:write(request)
+      client:read_start(function(readErr, data)
+        assert.is_nil(readErr)
+        if data then
+          responseBuffer = responseBuffer .. data
+          -- Check if we received the initial headers
+          if responseBuffer:find('\r\n\r\n') and not additionalDataReceived then
+            additionalDataReceived = true
+          end
+        end
+      end)
+    end)
+
+    vim.wait(1000, function() return connected and additionalDataReceived end)
+    assert.is_true(connected)
+    additionalDataReceived = false
+    assert.spy(onClientCloseSpy).was_not_called()
+
+    -- Wait briefly to ensure client is properly established as a streaming client
+    vim.wait(
+      100,
+      function()
+        return testServer.clientsObj
+          and vim.tbl_count(testServer.clientsObj) > 0
+      end
+    )
+
+    -- Verify that there is one client and it's a streaming client
+    local clientObj = nil
+    for _, c in pairs(testServer.clientsObj) do
+      clientObj = c
+      break
+    end
+    assert.is_not_nil(clientObj)
+    assert.is_true(clientObj.isMcpStream)
+
+    -- Close the server - this should send the special error message to streaming clients
+    testServer:close()
+    vim.wait(1000, function() return connected and additionalDataReceived end)
+    assert.is_true(additionalDataReceived)
+    assert.spy(onClientCloseSpy).was_called()
+    assert(
+      string.find(responseBuffer, 'data:{error%-json\n\n'),
+      'expected substring data:{error-json not found'
+    )
+  end)
 end)

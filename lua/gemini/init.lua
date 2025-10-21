@@ -246,8 +246,8 @@ function M.setup(opts)
   -- 1. Start MCP server
   server = ideMcpServer.new({
     onClientRequest = handleMcpRequest,
-    onClientClose = function() end,
   })
+
   local port = server:start(0) -- Listen on a random port
   log.info('MCP Server started on port: ' .. port)
   opts.port = port
