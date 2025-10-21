@@ -7,6 +7,7 @@ local log = require('plenary.log').new({
   level = os.getenv('NGC_LOG_LEVEL') or 'warn',
 })
 local M = {}
+local initialized = false
 
 -- Defer loading of modules to speed up startup
 local ideMcpServer
@@ -208,9 +209,18 @@ end
 --   - command (string): The command to run for the Gemini CLI.
 --   - autoRead (boolean): Enable automatic file reading when changed outside of Neovim (default: true).
 function M.setup(opts)
+  if initialized then
+    vim.notify(
+      'nvim-gemini-companion is already initialized',
+      vim.log.levels.WARN
+    )
+    return
+  end
+
   opts = opts or {}
   log.info('Setting up nvim-gemini-companion with options:', opts)
   load_modules()
+  initialized = true
 
   -- 1. Start MCP server
   server = ideMcpServer.new({

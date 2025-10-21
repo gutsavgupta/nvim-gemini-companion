@@ -125,7 +125,7 @@ function IdeMcpServer:close()
   for _, client in pairs(self.clientsObj) do
     client:close()
   end
-  self.server:close()
+  if not self.server:is_closing() then self.server:close() end
 end
 
 -------------------------------------------------------------------------------
