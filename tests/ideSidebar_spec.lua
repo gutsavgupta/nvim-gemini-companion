@@ -14,7 +14,7 @@ describe('ideSidebar', function()
 
     -- Create a mock for the terminal module
     terminalMock = {
-      create = spy.new(function(cmd, config)
+      create = spy.new(function(_cmd, _config)
         return {
           toggle = spy.new(function() end),
           exit = spy.new(function() end),
@@ -22,7 +22,7 @@ describe('ideSidebar', function()
           show = spy.new(function() end),
           switch = spy.new(function() end),
           buf = 1,
-          id = config and config.id or 'test-id',
+          id = 'test-id',
         }
       end),
       getActiveTerminals = spy.new(function()
@@ -48,25 +48,25 @@ describe('ideSidebar', function()
     vim.api.nvim_buf_get_lines = spy.new(function() return { 'test line' } end)
     vim.api.nvim_create_user_command = spy.new(function() end)
     vim.defer_fn = spy.new(function() end) -- Don't execute immediately for tests
-    vim.ui.select = spy.new(function(items, opts, callback)
+    vim.ui.select = spy.new(function(items, _opts, callback)
       if #items > 0 and callback then
         callback(items[1]) -- Select first item by default for tests
       end
     end)
     vim.notify = spy.new(function() end)
-    vim.system = spy.new(function(cmd, opts, callback)
+    vim.system = spy.new(function(_cmd, _opts, callback)
       if callback then
         callback({ code = 0 }) -- Simulate success by default
       end
     end)
 
     -- Override require for terminal to return our mock
-    local original_require = require
-    _G.require = function(module_name)
-      if module_name == 'gemini.terminal' then
+    local originalRequire = require
+    _G.require = function(moduleName)
+      if moduleName == 'gemini.terminal' then
         return terminalMock
       else
-        return original_require(module_name)
+        return originalRequire(moduleName)
       end
     end
 
@@ -90,8 +90,8 @@ describe('ideSidebar', function()
     end
     
     -- Mock the new functions to avoid real tmux interactions
-    ideSidebar.sendTextToTmux = spy.new(function(sessionName, text) end)
-    ideSidebar.spawnOrSwitchToTmux = spy.new(function(cmd) end)
+    ideSidebar.sendTextToTmux = spy.new(function(_sessionName, _text) end)
+    ideSidebar.spawnOrSwitchToTmux = spy.new(function(_cmd) end)
   end)
 
   after_each(function()
