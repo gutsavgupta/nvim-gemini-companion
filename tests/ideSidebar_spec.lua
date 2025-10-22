@@ -48,13 +48,13 @@ describe('ideSidebar', function()
     vim.api.nvim_buf_get_lines = spy.new(function() return { 'test line' } end)
     vim.api.nvim_create_user_command = spy.new(function() end)
     vim.defer_fn = spy.new(function() end) -- Don't execute immediately for tests
-    vim.ui.select = spy.new(function(items, _opts, callback)
+    vim.ui.select = spy.new(function(items, _, callback)
       if #items > 0 and callback then
         callback(items[1]) -- Select first item by default for tests
       end
     end)
     vim.notify = spy.new(function() end)
-    vim.system = spy.new(function(_cmd, _opts, callback)
+    vim.system = spy.new(function(_, _, callback)
       if callback then
         callback({ code = 0 }) -- Simulate success by default
       end
