@@ -71,7 +71,7 @@ describe('ideSidebar', function()
     end
 
     ideSidebar = require('gemini.ideSidebar')
-    
+
     -- Mock the new tmux-related functions to avoid interfering with production tmux sessions
     ideSidebar.getActiveTerminals = function()
       -- Return only sidebar terminals, not real tmux sessions
@@ -88,7 +88,7 @@ describe('ideSidebar', function()
 
       return combinedSessions
     end
-    
+
     -- Mock the new functions to avoid real tmux interactions
     ideSidebar.sendTextToTmux = spy.new(function(_sessionName, _text) end)
     ideSidebar.spawnOrSwitchToTmux = spy.new(function(_cmd) end)
@@ -362,7 +362,7 @@ describe('ideSidebar', function()
 
       -- Mock terminal creation for when sendText calls terminal.create
       local originalCreate = terminalMock.create
-      terminalMock.create = spy.new(function(cmd, config)
+      terminalMock.create = spy.new(function(_, _)
         return {
           buf = 1,
           show = spy.new(function() end),
@@ -371,10 +371,10 @@ describe('ideSidebar', function()
       end)
 
       -- Mock channel related functions for sendText to work properly
-      vim.api.nvim_buf_get_var = spy.new(function(buf, varname)
+      vim.api.nvim_buf_get_var = spy.new(function(_, _)
         return 123 -- mock channel id
       end)
-      vim.api.nvim_chan_send = spy.new(function(channel, text) end)
+      vim.api.nvim_chan_send = spy.new(function(_, _) end)
 
       -- Create a spy that captures the text parameter
       local capturedText = nil
@@ -382,9 +382,9 @@ describe('ideSidebar', function()
       local originalSendText = ideSidebar.sendText
       ideSidebar.sendText = sendTextSpy
 
-      vim.diagnostic.get = spy.new(function(bufnr) return mockDiagnostics end)
+      vim.diagnostic.get = spy.new(function(_) return mockDiagnostics end)
       vim.api.nvim_buf_get_name = spy.new(
-        function(bufnr) return 'testFile.lua' end
+        function(_) return 'testFile.lua' end
       )
 
       -- Call sendDiagnostic with nil line number to get all diagnostics
