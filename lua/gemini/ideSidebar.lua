@@ -63,6 +63,28 @@ local function sortTableRecursively(t)
   return sorted
 end
 
+-- Check if running inside a tmux session
+-- @return boolean True if running in tmux, false otherwise
+local function isTmux() return os.getenv('TMUX') ~= nil end
+
+-- Find a tmux window by name
+-- @param cmd string The command to look for (e.g., 'gemini', 'qwen')
+-- @return string|nil The tmux window ID (e.g., '@1') or nil if not found
+local function findMatchingTmuxWindow(windowName)
+  local command = 'tmux list-windows -F "#{window_name},#{window_id}"'
+  local handle = io.popen(command)
+  if not handle then return nil end
+  local result = handle:read('*a')
+  handle:close()
+
+  for line in result:gmatch('[^\n]+') do
+    local name, id = line:match('^(.*),(.*)')
+    if name and name == windowName then return id end
+  end
+
+  return nil
+end
+
 ----------------------------------------------------------------
 --- IDE Sidebar class public methods
 ----------------------------------------------------------------
@@ -210,15 +232,7 @@ function ideSidebar.sendSelectedText(cmdOpts)
   ideSidebar.sendText(text)
 end
 
---- Send text to sidebar last active terminal
--- Text is bracketed to ensure single block treatment
--- Used internally to send commands or data to active Gemini/Qwen terminal
--- @param text string The text to send to the terminal
--- @return nil
-function ideSidebar.sendText(text)
-  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
-  local term = terminal.create(opts.cmd, opts)
-
+function ideSidebar.sendTextToTerm(term, text)
   if not term.buf or not vim.api.nvim_buf_is_valid(term.buf) then
     term:exit()
     log.debug('No valid buffer found for terminal')
@@ -233,10 +247,226 @@ function ideSidebar.sendText(text)
   end
 
   local bracketStart = '\27[200~'
-  local bracketEnd = '\27[201~\r'
+  local bracketEnd = '\27[201~ '
   local bracketedText = bracketStart .. text .. bracketEnd
   vim.api.nvim_chan_send(channel, bracketedText)
+
+  -- Hide the currently active terminal
+  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+  local currentTerm = terminal.getActiveTerminals()[opts.id]
+  if
+    currentTerm
+    and currentTerm ~= term
+    and currentTerm.win
+    and vim.api.nvim_win_is_valid(currentTerm.win)
+  then
+    currentTerm:hide()
+  end
+
+  -- Find the terminal id for the term we're sending to
+  for i, opt in ipairs(ideSidebarState.terminalOpts) do
+    if opt.id == term.id then
+      ideSidebarState.lastActiveIdx = i
+      break
+    end
+  end
+
   term:show()
+end
+
+function ideSidebar.sendTextToTmux(sessionName, text)
+  local bracketStart = '\27[200~'
+  local bracketEnd = '\27[201~ '
+  local bracketedText = bracketStart .. text .. bracketEnd
+  vim.system(
+    { 'tmux', 'load-buffer', '-b', 'ngcbuffer0', '-' },
+    { stdin = bracketedText },
+    function(result)
+      if result.code == 0 then
+        os.execute(
+          string.format('tmux paste-buffer -b ngcbuffer0 -t "%s"', sessionName)
+        )
+        os.execute(string.format('tmux select-window -t "%s"', sessionName))
+      else
+        -- TODO change this to notify (via vim schedule)
+        log.error('Failed to send text to tmux')
+      end
+    end
+  )
+end
+
+--- Send text to sidebar last active terminal
+-- Text is bracketed to ensure single block treatment
+-- Used internally to send commands or data to active Gemini/Qwen terminal
+-- @param text string The text to send to the terminal
+-- @return nil
+function ideSidebar.sendText(text)
+  local activeSessions = ideSidebar.getActiveTerminals()
+  local routeTextToSession = function(sessionName)
+    if string.match(sessionName, '^sidebar:') then
+      -- routing to sidebar term session
+      local term = nil
+      local activeTerms = terminal.getActiveTerminals()
+      for idx, activeTerm in pairs(activeTerms) do
+        local name = activeTerm.config.name or idx
+        if name == string.gsub(sessionName, '^sidebar:', '') then
+          term = activeTerm
+          break
+        end
+      end
+      if not term then
+        vim.notify(
+          string.format('Session %s not found', sessionName),
+          vim.log.levels.ERROR
+        )
+        return
+      end
+      ideSidebar.sendTextToTerm(term, text)
+    else
+      -- routing to tmux session
+      sessionName = string.gsub(sessionName, '^tmux:', '')
+      ideSidebar.sendTextToTmux(sessionName, text)
+    end
+  end
+
+  if #activeSessions == 0 then
+    -- Fallback to lastActiveTerminal if no active sessions found
+    local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+    local term = terminal.create(opts.cmd, opts)
+    ideSidebar.sendTextToTerm(term, text)
+    return
+  elseif #activeSessions == 1 then
+    routeTextToSession(activeSessions[1])
+  else
+    -- Multiple active sessions, prompt user to select one
+    vim.ui.select(activeSessions, {
+      prompt = 'Select a session to send text to:',
+    }, function(choice)
+      if not choice then return end
+      routeTextToSession(choice)
+    end)
+  end
+end
+
+-- Helper function to spawn tmux window with proper configuration
+local function spawnTmuxWithConfig(optIndex, cmd, env)
+  if not cmd then return end
+  local windowName = string.format('ngc-agent-%d(%s)', optIndex, cmd)
+  local windowId = findMatchingTmuxWindow(windowName)
+  if windowId then
+    -- Window exists, switch to it
+    os.execute('tmux select-window -t ' .. windowId)
+  else
+    -- Window does not exist, create it with proper environment variables
+    local envCmd = ''
+    if type(env) == 'table' then
+      for key, value in pairs(env) do
+        envCmd = envCmd
+          .. string.format('%s="%s" ', tostring(key), tostring(value))
+      end
+    end
+
+    os.execute(
+      'tmux new-window -n "' .. windowName .. '" "' .. envCmd .. cmd .. '"'
+    )
+  end
+end
+
+--- Spawn a new tmux window with the specified CLI or switch to it if it already exists.
+-- @param cmd string The command to execute (e.g., 'gemini', 'qwen'). If nil, prompts user to select.
+function ideSidebar.spawnOrSwitchToTmux(cmd)
+  if not isTmux() then
+    vim.notify('Not running in a tmux session.', vim.log.levels.WARN)
+    return
+  end
+
+  -- local function to extract index and env variable for a command
+  local getIndexAndEnv = function(fcmd)
+    if not fcmd then return nil, nil end
+    local index = nil
+    local env = nil
+    for i, opt in ipairs(ideSidebarState.terminalOpts) do
+      if opt.cmd == fcmd then
+        index = i
+        env = opt.env
+        break
+      end
+    end
+    return index, env
+  end
+
+  -- If no cmd provided, prompt user to select one
+  if not cmd or cmd == '' then
+    if #ideSidebarState.terminalOpts == 0 then
+      vim.notify('No terminal commands configured.', vim.log.levels.ERROR)
+      return
+    elseif #ideSidebarState.terminalOpts == 1 then
+      local opt = ideSidebarState.terminalOpts[1]
+      return spawnTmuxWithConfig(1, opt.cmd, opt.env)
+    else
+      local cmdOptions = {}
+      for _, opt in ipairs(ideSidebarState.terminalOpts) do
+        local optionText = string.format('%s', opt.cmd)
+        table.insert(cmdOptions, optionText)
+      end
+      vim.ui.select(cmdOptions, {
+        prompt = 'Select a command to spawn in tmux:',
+      }, function(choice)
+        local index, env = getIndexAndEnv(choice)
+        return spawnTmuxWithConfig(index, choice, env)
+      end)
+    end
+  else
+    local index, env = getIndexAndEnv(cmd)
+    if not index or not env then
+      vim.notify(
+        string.format(
+          'Command "%s" not found in configured terminal options.',
+          cmd
+        ),
+        vim.log.levels.WARN
+      )
+      return
+    end
+    spawnTmuxWithConfig(index, cmd, env)
+  end
+end
+
+--- Get active terminals and tmux sessions
+-- Combines active terminals from terminal.lua with tmux sessions named ngc-agent(*)
+-- @return table A list of active sessions with prefixed names
+function ideSidebar.getActiveTerminals()
+  -- Get active terminals from terminal.lua
+  local activeTerminals = terminal.getActiveTerminals()
+  local combinedSessions = {}
+
+  -- Validate and add active terminals
+  for id, term in pairs(activeTerminals) do
+    if term.buf and vim.api.nvim_buf_is_valid(term.buf) then
+      local termName = 'sidebar:' .. (term.config.name or id)
+      table.insert(combinedSessions, termName)
+    end
+  end
+
+  -- Find matching tmux sessions
+  if isTmux() then
+    local command = 'tmux list-windows -F "#{window_name},#{window_id}"'
+    local handle = io.popen(command)
+    if handle then
+      local result = handle:read('*a')
+      handle:close()
+
+      for line in result:gmatch('[^\n]+') do
+        local sessionName, _ = line:match('^(.*),(.*)')
+        if sessionName and string.find(sessionName, 'ngc%-agent%-') then
+          local tmuxSessionName = 'tmux:' .. sessionName
+          table.insert(combinedSessions, tmuxSessionName)
+        end
+      end
+    end
+  end
+
+  return combinedSessions
 end
 
 -------------------------------------------------------
@@ -278,12 +508,13 @@ function ideSidebar.setup(opts)
   --- Creating Opts for Each Terminal
   -------------------------------------------------------
   opts = vim.tbl_deep_extend('force', defaults, opts)
+  ideSidebarState.port = opts.port
   if opts.cmd then opts.cmds = { opts.cmd } end
   for idx, cmd in ipairs(opts.cmds) do
     local termOpts =
       vim.tbl_deep_extend('force', vim.deepcopy(opts), { cmd = cmd })
     local onBuffer = termOpts.on_buf
-    termOpts.name = string.format('Agent %d: %s', idx, cmd)
+    termOpts.name = string.format('ngc-agent-%d(%s)', idx, cmd)
     termOpts.env.TERM_PROGRAM = 'vscode'
     if string.find(termOpts.cmd, 'qwen') then
       if termOpts.cmd == 'qwen' and vim.fn.executable('qwen') == 0 then
@@ -334,6 +565,16 @@ function ideSidebar.setup(opts)
     'GeminiToggle',
     function() ideSidebar.toggle() end,
     { desc = 'Toggle Gemini/Qwen sidebar' }
+  )
+
+  vim.api.nvim_create_user_command(
+    'GeminiToggleTmux',
+    function(cmdOpts) ideSidebar.spawnOrSwitchToTmux(cmdOpts.fargs[1]) end,
+    {
+      nargs = '*',
+      desc = 'Spawn or switch to a tmux window with the specified CLI. If no command is given, prompts for selection.',
+      complete = function() return { 'gemini', 'qwen' } end,
+    }
   )
 
   vim.api.nvim_create_user_command(

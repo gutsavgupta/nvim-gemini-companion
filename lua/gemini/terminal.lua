@@ -57,7 +57,7 @@ local presets = {
     col = 0.15, -- 15% from left of screen
     relative = 'editor', -- Relative to editor window
     border = 'rounded', -- Rounded border style
-    zindex = 1000, -- Z-index for layering
+    zindex = 25, -- Z-index for layering
     preset = 'floating',
   },
 }

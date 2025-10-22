@@ -123,6 +123,11 @@ end
 function IdeMcpServer:close()
   log.info('ideMcpServer: closing server')
   for _, client in pairs(self.clientsObj) do
+    if client.isMcpStream then
+      -- proper client-close does doen't trigger disconnection on gemini/qwen clis
+      -- sending an error json in shutdown case is a hack to achieve the same
+      client.tcpClient:write('data:{error-json\n\n')
+    end
     client:close()
   end
   if not self.server:is_closing() then self.server:close() end

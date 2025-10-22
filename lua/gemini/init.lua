@@ -15,6 +15,7 @@ local ideCntxManager
 local ideDiffManager
 local ideSidebar
 local announcement
+local persistence
 
 -- Lazily loads the plugin's modules.
 -- This is done to improve Neovim's startup time by only
@@ -26,6 +27,7 @@ local function load_modules()
   ideDiffManager = require('gemini.ideDiffManager')
   ideSidebar = require('gemini.ideSidebar')
   announcement = require('gemini.announce')
+  persistence = require('gemini.persistence')
 end
 
 local server = nil
@@ -222,12 +224,15 @@ function M.setup(opts)
   load_modules()
   initialized = true
 
+  -- 0. Read a valid persistent details of previous nvim-gemini-companion
+  local details = persistence.getStaleServerDetail()
   -- 1. Start MCP server
   server = ideMcpServer.new({
     onClientRequest = handleMcpRequest,
-    onClientClose = function() end,
   })
-  local port = server:start(0) -- Listen on a random port
+
+  local port = server:start(details and details.port or 0) -- Listen on a random port
+  persistence.writeServerDetails(port, vim.fn.getcwd())
   log.info('MCP Server started on port: ' .. port)
   opts.port = port
   vim.api.nvim_create_autocmd('VimLeave', {
