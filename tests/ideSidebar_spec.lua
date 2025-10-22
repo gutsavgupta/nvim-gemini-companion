@@ -48,6 +48,17 @@ describe('ideSidebar', function()
     vim.api.nvim_buf_get_lines = spy.new(function() return { 'test line' } end)
     vim.api.nvim_create_user_command = spy.new(function() end)
     vim.defer_fn = spy.new(function() end) -- Don't execute immediately for tests
+    vim.ui.select = spy.new(function(items, opts, callback)
+      if #items > 0 and callback then
+        callback(items[1]) -- Select first item by default for tests
+      end
+    end)
+    vim.notify = spy.new(function() end)
+    vim.system = spy.new(function(cmd, opts, callback)
+      if callback then
+        callback({ code = 0 }) -- Simulate success by default
+      end
+    end)
 
     -- Override require for terminal to return our mock
     local original_require = require
@@ -60,6 +71,27 @@ describe('ideSidebar', function()
     end
 
     ideSidebar = require('gemini.ideSidebar')
+    
+    -- Mock the new tmux-related functions to avoid interfering with production tmux sessions
+    ideSidebar.getActiveTerminals = function()
+      -- Return only sidebar terminals, not real tmux sessions
+      local activeTerminals = terminalMock.getActiveTerminals()
+      local combinedSessions = {}
+
+      -- Validate and add active terminals
+      for id, term in pairs(activeTerminals) do
+        if term.buf and vim.api.nvim_buf_is_valid(term.buf) then
+          local termName = 'sidebar:' .. (term.config.name or id)
+          table.insert(combinedSessions, termName)
+        end
+      end
+
+      return combinedSessions
+    end
+    
+    -- Mock the new functions to avoid real tmux interactions
+    ideSidebar.sendTextToTmux = spy.new(function(sessionName, text) end)
+    ideSidebar.spawnOrSwitchToTmux = spy.new(function(cmd) end)
   end)
 
   after_each(function()
@@ -81,9 +113,9 @@ describe('ideSidebar', function()
       ideSidebar.setup({ cmd = 'gemini', port = 12345 })
 
       -- Verify that vim.api.nvim_create_user_command was called for each expected command
-      -- There are 6 commands: GeminiToggle, GeminiSwitchSidebarStyle, GeminiSend,
-      -- GeminiSendFileDiagnostic, GeminiSendLineDiagnostic, GeminiClose
-      assert.spy(vim.api.nvim_create_user_command).was.called(6)
+      -- There are 7 commands: GeminiToggle, GeminiSwitchSidebarStyle, GeminiSend,
+      -- GeminiSendFileDiagnostic, GeminiSendLineDiagnostic, GeminiClose, GeminiToggleTmux
+      assert.spy(vim.api.nvim_create_user_command).was.called(7)
     end)
   end)
 
