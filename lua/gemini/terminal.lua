@@ -83,7 +83,7 @@ local function hresize(size, maxSize)
   vim.cmd('resize ' .. size)
   -- Fix the window height to prevent other splits from resizing it
   -- This ensures horizontal splits maintain their height when other windows are resized
-  vim.api.nvim_win_set_option(0, 'winfixheight', true)
+  vim.wo[vim.api.nvim_get_current_win()]['winfixheight'] = true
 end
 
 -- Helper function to resize windows vertically
@@ -95,7 +95,7 @@ local function vresize(size, maxSize)
   vim.cmd('vertical resize ' .. size)
   -- Fix the window width to prevent other splits from resizing it
   -- This ensures vertical splits maintain their width when other windows are resized
-  vim.api.nvim_win_set_option(0, 'winfixwidth', true)
+  vim.wo[vim.api.nvim_get_current_win()]['winfixwidth'] = true
 end
 
 ----------------------------------------------------------------
