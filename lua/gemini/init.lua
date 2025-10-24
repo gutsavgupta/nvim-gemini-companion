@@ -212,9 +212,14 @@ end
 --   - autoRead (boolean): Enable automatic file reading when changed outside of Neovim (default: true).
 function M.setup(opts)
   if initialized then
-    vim.notify(
-      'nvim-gemini-companion is already initialized',
-      vim.log.levels.WARN
+    vim.defer_fn(
+      function()
+        vim.notify(
+          'nvim-gemini-companion is already initialized',
+          vim.log.levels.WARN
+        )
+      end,
+      500
     )
     return
   end
@@ -227,14 +232,19 @@ function M.setup(opts)
   -- 0. Read a valid persistent details of previous nvim-gemini-companion
   local existingServer = persistence.getServerDetailsForSameWorkspace()
   if existingServer and existingServer.isActive then
-    vim.notify(
-      string.format(
-        'Not starting nvim-gemini-companion service'
-          .. ', another one is already running at port %s for workspace %s',
-        existingServer.details.port,
-        existingServer.details.workspace
-      ),
-      vim.log.levels.INFO
+    vim.defer_fn(
+      function()
+        vim.notify(
+          string.format(
+            'Not starting nvim-gemini-companion service'
+              .. ', another one is already running at port %s for workspace %s',
+            existingServer.details.port,
+            existingServer.details.workspace
+          ),
+          vim.log.levels.INFO
+        )
+      end,
+      500
     )
     return
   end

@@ -116,125 +116,38 @@ To use tmux functionality, you must be running neovim inside an active tmux sess
 The plugin uses `vim.ui.select` for interactive selection prompts (such as choosing between multiple active sessions). For a better selection experience, you can configure an enhanced picker like fzf-lua, telescope, or snacks.nvim.
 
 <details>
-<summary>Click here for fzf-lua configuration</summary>
+<summary>Config I am using to shadow vim.ui.select with fzf-lua </summary>
 
 To use fzf-lua as a replacement for the default `vim.ui.select`:
 
 ```lua
 -- Add fzf-lua to your dependencies
 {
-  'ibhagwan/fzf-lua',
-  dependencies = { 'nvim-tree/nvim-web-devicons' },
-  config = function()
-    require('fzf-lua').setup({})
+  "gutsavgupta/nvim-gemini-companion",
+  dependencies = {
+    "nvim-lua/plenary.nvim",
+    'ibhagwan/fzf-lua',
+  },
+  event = "VeryLazy",
+  config = function(opts)
+    require('gemini').setup({opts})
     
     -- Override vim.ui.select with fzf-lua
-    vim.ui.select = function(items, opts, on_choice)
-      if #items == 0 then
-        on_choice(nil, nil)
-        return
-      end
-
-      local format_item = opts.format_item or tostring
-      local display_items = vim.tbl_map(format_item, items)
-
-      require('fzf-lua').fzf_exec(display_items, {
-        prompt = opts.prompt or 'Select: ',
+    vim.ui.select = function(items, opts, onChoice)
+      require('fzf-lua').fzf_exec(items, {
+        prompt = opts.prompt or 'select from items',
         actions = {
-          ['default'] = function(selected, ctx)
-            local idx = ctx.index
-            if idx and items[idx] then
-              on_choice(items[idx], idx)
-            else
-              on_choice(nil, nil)
-            end
-          end
-        }
+          ['default'] = function(selected) onChoice(selected[1]) end,
+        },
+        winopts = { height = math.min(0.2 + #items * 0.05, 0.6) },
       })
     end
   end
 }
 ```
 
-This configuration will replace the default selection UI with fzf-lua, providing a much more powerful and visually appealing selection interface when choosing between AI sessions, commands, or other options in the plugin.
-
-</details>
-
-<details>
-<summary>Click here for telescope configuration</summary>
-
-To use telescope as a replacement for the default `vim.ui.select`:
-
-```lua
--- Add telescope to your dependencies
-{
-  'nvim-telescope/telescope.nvim',
-  tag = '0.1.8',
-  dependencies = { 'nvim-lua/plenary.nvim' },
-  config = function()
-    require('telescope').setup({})
-    
-    -- Override vim.ui.select with telescope
-    vim.ui.select = function(items, opts, on_choice)
-      if #items == 0 then
-        on_choice(nil, nil)
-        return
-      end
-
-      local format_item = opts.format_item or tostring
-      local display_items = vim.tbl_map(format_item, items)
-      
-      -- Create a temporary picker to handle the selection
-      require('telescope.pickers').new({}, {
-        prompt_title = opts.prompt or 'Select an item',
-        finder = require('telescope.finders').new_table {
-          results = display_items,
-        },
-        sorter = require('telescope.config').values.generic_sorter({}),
-        attach_mappings = function(prompt_bufnr, map)
-          require('telescope.actions').select_default:replace(function()
-            local selection = require('telescope.actions.state').get_selected_entry()
-            local idx = selection and selection.ordinal and tonumber(selection.ordinal:match('^%s*(%d+)'))
-            if idx and items[idx] then
-              on_choice(items[idx], idx)
-            else
-              on_choice(nil, nil)
-            end
-            require('telescope.actions').close(prompt_bufnr)
-          end)
-          return true
-        end,
-      }):find()
-    end
-  end
-}
-```
-
-This configuration will replace the default selection UI with telescope, providing a familiar and powerful selection interface.
-
-</details>
-
-<details>
-<summary>Click here for snacks.nvim configuration</summary>
-
-To use snacks.nvim as a replacement for the default `vim.ui.select`:
-
-```lua
--- Add snacks.nvim to your dependencies
-{
-  'folke/snacks.nvim',
-  priority = 1000,
-  opts = {
-    -- Enable the picker module which automatically replaces vim.ui.select
-    picker = { enabled = true },
-  },
-  config = function(_, opts)
-    require('snacks').setup(opts)
-  end
-}
-```
-
-This configuration will automatically replace the default selection UI with snacks.nvim picker when the picker module is enabled, providing a modern and efficient selection interface.
+This configuration replaces the default selection UI with fzf-lua for a more powerful and visually appealing selection interface when choosing between AI sessions, commands, or other options.
+Note: Similar implementations exist for other picker plugins like telescope and snacks.nvim, or you can use plugins that automatically enhance vim.ui.select.
 
 </details>
 
