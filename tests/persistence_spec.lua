@@ -18,11 +18,13 @@ describe('persistence module', function()
 
   describe('getServerDetailsPath', function()
     it(
-      'should return a path with the correct format including current PID',
+      'should return a path with the correct format including CWD hash',
       function()
         local path = persistence.getServerDetailsPath()
+        local cwd = vim.fn.getcwd()
+        local cwdHash = vim.fn.sha256(cwd)
         local expectedPattern = '/tmp/nvim%-gemini%-companion%-'
-          .. currentPid
+          .. string.sub(cwdHash, 1, 12)
           .. '%.json'
 
         assert.are.equal(type(path), 'string')
@@ -33,12 +35,15 @@ describe('persistence module', function()
       end
     )
 
-    it('should return different paths for different nvim instances', function()
+    it('should return different paths for different working directories', function()
       local path = persistence.getServerDetailsPath()
-      local pidPattern = '/tmp/nvim%-gemini%-companion%-(%d+)%.json'
-      local foundPid = string.match(path, pidPattern)
+      local cwd = vim.fn.getcwd()
+      local cwdHash = vim.fn.sha256(cwd)
+      local expectedHash = string.sub(cwdHash, 1, 12)
+      local hashPattern = '/tmp/nvim%-gemini%-companion%-([a-f0-9]+)%.json'
+      local foundHash = string.match(path, hashPattern)
 
-      assert.are.equal(tonumber(foundPid), currentPid)
+      assert.are.equal(foundHash, expectedHash)
     end)
   end)
 
@@ -164,10 +169,12 @@ describe('persistence module', function()
     end)
   end)
 
-  describe('getStaleServerDetail', function()
-    -- Helper function to create a fake stale server file
-    local function createStaleServerFile(pid, port, workspace, timestamp)
-      local filename = string.format('/tmp/nvim-gemini-companion-%d.json', pid)
+  describe('getServerDetailsForSameWorkspace', function()
+    -- Helper function to create a server details file for a specific workspace
+    local function createServerDetailsFile(workspace, port, pid, timestamp)
+      local cwdHash = vim.fn.sha256(workspace)
+      local shortHash = string.sub(cwdHash, 1, 12)
+      local filename = string.format('/tmp/nvim-gemini-companion-%s.json', shortHash)
       local data = {
         port = port,
         workspace = workspace,
@@ -196,70 +203,69 @@ describe('persistence module', function()
       end
     end)
 
-    it('should return nil when no stale files exist', function()
-      local result = persistence.getStaleServerDetail()
+    it('should return nil when no server details files exist', function()
+      local result = persistence.getServerDetailsForSameWorkspace()
       assert.are.equal(result, nil)
     end)
 
     it(
       'should return nil when there are files but none match current workspace',
       function()
-        -- Create a stale file with different workspace
+        -- Create a server details file with different workspace
         local differentWorkspace = '/tmp/different-workspace'
         if currentWorkspace == differentWorkspace then
           differentWorkspace = '/tmp/another-workspace'
         end
-        createStaleServerFile(1111, 8080, differentWorkspace)
+        createServerDetailsFile(differentWorkspace, 8080, currentPid + 1000)
 
-        local result = persistence.getStaleServerDetail()
+        local result = persistence.getServerDetailsForSameWorkspace()
         assert.are.equal(result, nil)
       end
     )
 
     it(
-      'should return stale server details when there is a stale file with matching workspace',
+      'should return server details when there is a file with matching workspace',
       function()
-        -- Create a stale server file with the current workspace and a different PID
+        -- Create a server details file with the current workspace and a different PID
         local fakePid = currentPid + 1000 -- Fake PID that doesn't exist
         local expectedPort = 8080
-        createStaleServerFile(fakePid, expectedPort, currentWorkspace)
+        createServerDetailsFile(currentWorkspace, expectedPort, fakePid)
 
-        local result = persistence.getStaleServerDetail()
+        local result = persistence.getServerDetailsForSameWorkspace()
 
         assert.are.equal(type(result), 'table')
-        assert.are.equal(result.port, expectedPort)
-        assert.are.equal(result.workspace, currentWorkspace)
-        assert.are.equal(result.pid, fakePid)
+        assert.are.equal(type(result.details), 'table')
+        assert.are.equal(result.details.port, expectedPort)
+        assert.are.equal(result.details.workspace, currentWorkspace)
+        assert.are.equal(result.details.pid, fakePid)
+        assert.are.equal(type(result.isActive), 'boolean')
       end
     )
 
-    it('should remove the stale file after returning its details', function()
-      -- Create a stale server file with the current workspace and a different PID
-      local fakePid = currentPid + 2000 -- Fake PID that doesn't exist
-      local filename = createStaleServerFile(fakePid, 9090, currentWorkspace)
+    it('should return isActive=true when process is active', function()
+      -- This is hard to test with a real active process, so we'll test the logic
+      -- by creating a file with current PID (which should be active)
+      local filename = createServerDetailsFile(currentWorkspace, 8080, currentPid)
 
-      -- Verify file exists before calling the function
-      assert.truthy(uv.fs_stat(filename), 'Test file was not created')
+      local result = persistence.getServerDetailsForSameWorkspace()
 
-      local result = persistence.getStaleServerDetail()
-
-      -- Verify that the function returned the data
-      assert.truthy(result, 'Function should have returned stale details')
-      assert.are.equal(result.pid, fakePid)
-
-      -- Verify that the file has been removed
-      assert.falsy(uv.fs_stat(filename), 'Stale file should have been removed')
+      assert.are.equal(type(result), 'table')
+      assert.are.equal(type(result.details), 'table')
+      assert.are.equal(result.details.workspace, currentWorkspace)
+      assert.are.equal(result.isActive, true)
     end)
 
-    it(
-      'should not return details for a file with the same PID as current process',
-      function()
-        -- Create a server file with the current PID (should not be considered stale)
-        createStaleServerFile(currentPid, 7070, currentWorkspace)
+    it('should return isActive=false when process is not active', function()
+      -- Create a server details file with a fake PID (which should not be active)
+      local fakePid = 1 -- System PID that's unlikely to exist or be nvim
+      local filename = createServerDetailsFile(currentWorkspace, 8080, fakePid)
 
-        local result = persistence.getStaleServerDetail()
-        assert.are.equal(result, nil)
-      end
-    )
+      local result = persistence.getServerDetailsForSameWorkspace()
+
+      assert.are.equal(type(result), 'table')
+      assert.are.equal(type(result.details), 'table')
+      assert.are.equal(result.details.workspace, currentWorkspace)
+      assert.are.equal(result.isActive, false)
+    end)
   end)
 end)

@@ -20,6 +20,9 @@ local ideSidebarState = {
   terminalOpts = {},
 }
 
+local cwdBase =
+  string.gsub(vim.fn.fnamemodify(vim.fn.getcwd(), ':t'), '[%s:]', '_')
+cwdBase = #cwdBase > 20 and string.sub(cwdBase, 1, 20) or cwdBase
 ----------------------------------------------------------------
 --- Helper Functions
 ----------------------------------------------------------------
@@ -351,7 +354,8 @@ end
 -- Helper function to spawn tmux window with proper configuration
 local function spawnTmuxWithConfig(optIndex, cmd, env)
   if not cmd then return end
-  local windowName = string.format('ngc-agent-%d(%s)', optIndex, cmd)
+  local windowName = string.format('%s-ngc-%d(%s)', cwdBase, optIndex, cmd)
+
   local windowId = findMatchingTmuxWindow(windowName)
   if windowId then
     -- Window exists, switch to it
@@ -453,12 +457,14 @@ function ideSidebar.getActiveTerminals()
     local command = 'tmux list-windows -F "#{window_name},#{window_id}"'
     local handle = io.popen(command)
     if handle then
+      local pattern = string.format('%s-ngc-', cwdBase)
       local result = handle:read('*a')
       handle:close()
-
       for line in result:gmatch('[^\n]+') do
         local sessionName, _ = line:match('^(.*),(.*)')
-        if sessionName and string.find(sessionName, 'ngc%-agent%-') then
+        if
+          sessionName and vim.fn.match(sessionName, '\\V' .. pattern) ~= -1
+        then
           local tmuxSessionName = 'tmux:' .. sessionName
           table.insert(combinedSessions, tmuxSessionName)
         end
@@ -514,7 +520,9 @@ function ideSidebar.setup(opts)
     local termOpts =
       vim.tbl_deep_extend('force', vim.deepcopy(opts), { cmd = cmd })
     local onBuffer = termOpts.on_buf
-    termOpts.name = string.format('ngc-agent-%d(%s)', idx, cmd)
+    local name = string.format('%s-ngc-%d(%s)', cwdBase, idx, cmd)
+
+    termOpts.name = name
     termOpts.env.TERM_PROGRAM = 'vscode'
     if string.find(termOpts.cmd, 'qwen') then
       if termOpts.cmd == 'qwen' and vim.fn.executable('qwen') == 0 then

@@ -225,13 +225,25 @@ function M.setup(opts)
   initialized = true
 
   -- 0. Read a valid persistent details of previous nvim-gemini-companion
-  local details = persistence.getStaleServerDetail()
+  local existingServer = persistence.getServerDetailsForSameWorkspace()
+  if existingServer and existingServer.isActive then
+    vim.notify(
+      string.format(
+        'Not starting nvim-gemini-companion service'
+          .. ', another one is already running at port %s for workspace %s',
+        existingServer.details.port,
+        existingServer.details.workspace
+      ),
+      vim.log.levels.INFO
+    )
+    return
+  end
   -- 1. Start MCP server
   server = ideMcpServer.new({
     onClientRequest = handleMcpRequest,
   })
 
-  local port = server:start(details and details.port or 0) -- Listen on a random port
+  local port = server:start(existingServer and existingServer.details.port or 0) -- Listen on a random port
   persistence.writeServerDetails(port, vim.fn.getcwd())
   log.info('MCP Server started on port: ' .. port)
   opts.port = port

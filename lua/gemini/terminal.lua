@@ -331,14 +331,16 @@ end
 
 -- Helper method to apply window options from configuration
 function terminal:applyWindowOptions()
+  local width = self.config.extendedWin.width
   for k, v in pairs(self.config.extendedWin.wo) do
     pcall(function() vim.wo[self.win][k] = v end)
   end
 
   -- Set winbar to display "Agent: command" (max 20 chars), Left-aligned
+  width = width and relativeToAbsolute(width, vim.o.columns) or nil
   local cmdName = self.config.name or (self.cmd or vim.o.shell)
-  local truncatedTitle = string.len(cmdName) > 20
-      and string.sub(cmdName, 1, 17) .. '...'
+  local truncatedTitle = (string.len(cmdName) > (width or 20))
+      and string.sub(cmdName, 1, (width or 20)) .. '...'
     or cmdName
   vim.wo[self.win].winbar = truncatedTitle .. '%=' -- Left-aligned with %=
 end

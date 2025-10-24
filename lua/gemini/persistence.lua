@@ -30,16 +30,21 @@ end
 --------------------------------------------------------
 local M = {}
 
--- Get the server details file path for the current neovim instance
--- @return string: Path to the server details file in /tmp directory
+-- Gets the path for the server details file.
+-- This path is unique for each workspace to allow multiple nvim instances to run
+-- in different workspaces without conflicts.
+-- @return string: The absolute path to the server details file.
 function M.getServerDetailsPath()
-  local pid = vim.fn.getpid()
-  return string.format('/tmp/nvim-gemini-companion-%d.json', pid)
+  local cwd = vim.fn.getcwd()
+  local cwdHash = vim.fn.sha256(cwd)
+  -- Use only first 12 characters of the hash to keep filename manageable
+  local shortHash = string.sub(cwdHash, 1, 12)
+  return string.format('/tmp/nvim-gemini-companion-%s.json', shortHash)
 end
 
--- Read server details from file
--- @param path string|nil: Optional path to read from. If nil, uses default path
--- @return table|nil: Server details table if successful, nil if failed
+-- Reads and decodes the server details from a JSON file.
+-- @param path string|nil: The absolute path to the file to read. If nil, the default path is used.
+-- @return table|nil: The server details as a table, or nil if the file does not exist or is invalid.
 function M.readServerDetails(path)
   path = path or M.getServerDetailsPath()
   local file = io.open(path, 'r')
@@ -57,9 +62,10 @@ function M.readServerDetails(path)
   return data
 end
 
--- Write server details to file
--- @param port number: Port number for the server
--- @param workspace string: Current working directory/workspace path
+-- Writes the server details to a JSON file.
+-- This file is used to communicate the server's port, workspace, and PID to other processes.
+-- @param port number: The port number the server is listening on.
+-- @param workspace string: The absolute path of the current workspace.
 function M.writeServerDetails(port, workspace)
   local path = M.getServerDetailsPath()
   local data = {
@@ -79,31 +85,25 @@ function M.writeServerDetails(port, workspace)
   file:close()
 end
 
--- Get stale server details from previous nvim sessions in the same workspace
--- Removes the stale file and returns its details to potentially reuse the port
--- @return table|nil: Stale server details table if found, nil otherwise
-function M.getStaleServerDetail()
-  local currentPid = vim.fn.getpid()
+-- Finds server details for the current workspace by searching for server details files in /tmp.
+-- This is used to check if another instance of the plugin is already running for the same project.
+-- @return table|nil: A table with `details` and `isActive` boolean, or nil if no details are found.
+function M.getServerDetailsForSameWorkspace()
   local currentWorkspace = vim.fn.getcwd()
   local files = vim.fn.glob('/tmp/nvim-gemini-companion-*.json', true, true)
   for _, file in ipairs(files) do
-    local pidStr =
-      string.match(file, '/tmp/nvim%-gemini%-companion%-(%d+)%.json')
-    local pid = pidStr and tonumber(pidStr) or nil
-    if pid and pid ~= currentPid and not isActiveNvimProcess(pid) then
-      local details = M.readServerDetails(file)
-      if details and details.workspace == currentWorkspace then
-        log.debug(
-          string.format(
-            'Found stale server with details: %s',
-            vim.fn.json_encode(details)
-          )
+    local details = M.readServerDetails(file)
+    if details and details.workspace == currentWorkspace then
+      log.debug(
+        string.format(
+          'Found stale server with details: %s',
+          vim.fn.json_encode(details)
         )
-        os.remove(file)
-        return details
-      end
+      )
+      return { details = details, isActive = isActiveNvimProcess(details.pid) }
     end
   end
+  return nil
 end
 
 return M
