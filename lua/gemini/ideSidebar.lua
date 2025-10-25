@@ -294,7 +294,7 @@ function ideSidebar.sendTextToTerm(term, text)
   end
 
   local bracketStart = '\27[200~'
-  local bracketEnd = '\27[201~\r'
+  local bracketEnd = '\27[201~'
   local bracketedText = bracketStart .. text .. bracketEnd
   vim.api.nvim_chan_send(channel, bracketedText)
 
@@ -327,7 +327,7 @@ end
 -- @return nil
 function ideSidebar.sendTextToTmux(sessionName, text)
   local bracketStart = '\27[200~'
-  local bracketEnd = '\27[201~\r'
+  local bracketEnd = '\27[201~'
   local bracketedText = bracketStart .. text .. bracketEnd
   vim.system(
     { 'tmux', 'load-buffer', '-b', 'ngcbuffer0', '-' },
