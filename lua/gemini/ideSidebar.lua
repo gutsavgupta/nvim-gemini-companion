@@ -93,14 +93,14 @@ end
 -- @param optIndex number The index of the option in terminalOpts
 -- @param cmd string|nil The command to execute
 -- @param env table|nil The environment variables table
-local function spawnTmuxWithConfig(optIndex, cmd, env)
+local function spawnTmuxWithConfig(optIndex)
   if not isTmux() then
     vim.notify('Not running in a tmux session.', vim.log.levels.WARN)
     return
   end
   local opt = ideSidebarState.terminalOpts[optIndex]
-  cmd = cmd or opt.cmd
-  env = env or opt.env
+  local cmd = opt.cmd
+  local env = opt.env
   if not cmd then return end
   local windowName = string.format('%s-ngc-%d(%s)', cwdBase, optIndex, cmd)
 
@@ -140,68 +140,6 @@ end
 ----------------------------------------------------------------
 --- Public Methods
 ----------------------------------------------------------------
---- Toggle the sidebar terminal
--- Used by 'GeminiToggle' command to show/hide the sidebar terminal
--- @return nil
-function ideSidebar.toggle()
-  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
-  local term = terminal.getActiveTerminals()[opts.id]
-  if not term then
-    term = terminal.create(opts.cmd, opts)
-    return
-  end
-  term:toggle()
-end
-
---- Close the sidebar terminal
--- Used by 'GeminiClose' command to close the sidebar terminal
--- @return nil
-function ideSidebar.close()
-  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
-  local term = terminal.getActiveTerminals()[opts.id]
-  if not term then
-    log.warn('No terminal found with ID', opts.id)
-    return
-  end
-  term:exit()
-end
-
---- Switch to next sidebar terminal in command list
--- Hide current terminal and open next one in list
--- Used when multiple commands configured and Tab pressed in terminal mode
--- @return nil
-function ideSidebar.switchTerms()
-  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
-  terminal.create(opts.cmd, opts):hide()
-  ideSidebarState.lastActiveIdx = (
-    ideSidebarState.lastActiveIdx % #ideSidebarState.terminalOpts
-  ) + 1
-
-  local nextOpts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
-  terminal.create(nextOpts.cmd, nextOpts):show()
-end
-
---- Switch sidebar style to preset or specified preset
--- If no preset provided, cycle to next preset in list
--- Used by 'GeminiSwitchSidebarStyle' command to change appearance
--- @param presetName? string The name of the preset to switch to.
--- @return nil
-function ideSidebar.switchStyle(presetName)
-  if not presetName or type(presetName) ~= 'string' then
-    presetName = presetKeys[ideSidebarState.lastPresetIdx % #presetKeys + 1]
-  end
-  for _, opts in ipairs(ideSidebarState.terminalOpts) do
-    local term = terminal.getActiveTerminals()[opts.id]
-    if term then
-      term:hide()
-      presetName = term:switch(presetName)
-    end
-    opts.win.preset = presetName
-  end
-  vim.defer_fn(ideSidebar.toggle, 100)
-  ideSidebarState.lastPresetIdx = getPresetIdx(presetName)
-end
-
 --- Send diagnostic information to sidebar terminal
 -- Filter and format diagnostics from specified buffer and line number,
 -- send as JSON to active terminal for analysis
@@ -284,6 +222,59 @@ function ideSidebar.sendSelectedText(cmdOpts)
   ideSidebar.sendText(text)
 end
 
+--- Send text to sidebar last active terminal
+-- Text is bracketed to ensure single block treatment
+-- Used internally to send commands or data to active Gemini/Qwen terminal
+-- @param text string The text to send to the terminal
+-- @return nil
+function ideSidebar.sendText(text)
+  local activeSessions = ideSidebar.getActiveTerminals()
+  local routeTextToSession = function(sessionName)
+    if string.match(sessionName, '^sidebar:') then
+      -- routing to sidebar term session
+      local term = nil
+      local activeTerms = terminal.getActiveTerminals()
+      for idx, activeTerm in pairs(activeTerms) do
+        local name = activeTerm.config.name or idx
+        if name == string.gsub(sessionName, '^sidebar:', '') then
+          term = activeTerm
+          break
+        end
+      end
+      if not term then
+        vim.notify(
+          string.format('Session %s not found', sessionName),
+          vim.log.levels.ERROR
+        )
+        return
+      end
+      ideSidebar.sendTextToTerm(term, text)
+    else
+      -- routing to tmux session
+      sessionName = string.gsub(sessionName, '^tmux:', '')
+      ideSidebar.sendTextToTmux(sessionName, text)
+    end
+  end
+
+  if #activeSessions == 0 then
+    -- Fallback to lastActiveTerminal if no active sessions found
+    local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+    local term = terminal.create(opts.cmd, opts)
+    ideSidebar.sendTextToTerm(term, text)
+    return
+  elseif #activeSessions == 1 then
+    routeTextToSession(activeSessions[1])
+  else
+    -- Multiple active sessions, prompt user to select one
+    vim.ui.select(activeSessions, {
+      prompt = 'Select a session to send text to:',
+    }, function(choice)
+      if not choice then return end
+      routeTextToSession(choice)
+    end)
+  end
+end
+
 --- Send text to a specific terminal
 -- @param term table The terminal object to send text to
 -- @param text string The text to send to the terminal
@@ -355,59 +346,6 @@ function ideSidebar.sendTextToTmux(sessionName, text)
   )
 end
 
---- Send text to sidebar last active terminal
--- Text is bracketed to ensure single block treatment
--- Used internally to send commands or data to active Gemini/Qwen terminal
--- @param text string The text to send to the terminal
--- @return nil
-function ideSidebar.sendText(text)
-  local activeSessions = ideSidebar.getActiveTerminals()
-  local routeTextToSession = function(sessionName)
-    if string.match(sessionName, '^sidebar:') then
-      -- routing to sidebar term session
-      local term = nil
-      local activeTerms = terminal.getActiveTerminals()
-      for idx, activeTerm in pairs(activeTerms) do
-        local name = activeTerm.config.name or idx
-        if name == string.gsub(sessionName, '^sidebar:', '') then
-          term = activeTerm
-          break
-        end
-      end
-      if not term then
-        vim.notify(
-          string.format('Session %s not found', sessionName),
-          vim.log.levels.ERROR
-        )
-        return
-      end
-      ideSidebar.sendTextToTerm(term, text)
-    else
-      -- routing to tmux session
-      sessionName = string.gsub(sessionName, '^tmux:', '')
-      ideSidebar.sendTextToTmux(sessionName, text)
-    end
-  end
-
-  if #activeSessions == 0 then
-    -- Fallback to lastActiveTerminal if no active sessions found
-    local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
-    local term = terminal.getActiveTerminals()[opts.id]
-    ideSidebar.sendTextToTerm(term, text)
-    return
-  elseif #activeSessions == 1 then
-    routeTextToSession(activeSessions[1])
-  else
-    -- Multiple active sessions, prompt user to select one
-    vim.ui.select(activeSessions, {
-      prompt = 'Select a session to send text to:',
-    }, function(choice)
-      if not choice then return end
-      routeTextToSession(choice)
-    end)
-  end
-end
-
 --- Switch to a CLI in either tmux or sidebar
 -- @param arg string The argument specifying the CLI to switch to
 -- @return nil
@@ -458,6 +396,47 @@ function ideSidebar.switchToCli(arg)
       vim.log.levels.ERROR
     )
   end
+end
+
+--- Switch to next sidebar terminal in command list
+-- Hide current terminal and open next one in list
+-- Used when multiple commands configured and Tab pressed in terminal mode
+-- @return nil
+function ideSidebar.switchTerms()
+  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+  terminal.create(opts.cmd, opts):hide()
+  ideSidebarState.lastActiveIdx = (
+    ideSidebarState.lastActiveIdx % #ideSidebarState.terminalOpts
+  ) + 1
+
+  local nextOpts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+  terminal.create(nextOpts.cmd, nextOpts):show()
+end
+
+--- Toggle the sidebar terminal
+-- Used by 'GeminiToggle' command to show/hide the sidebar terminal
+-- @return nil
+function ideSidebar.toggle()
+  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+  local term = terminal.getActiveTerminals()[opts.id]
+  if not term then
+    term = terminal.create(opts.cmd, opts)
+    return
+  end
+  term:toggle()
+end
+
+--- Close the sidebar terminal
+-- Used by 'GeminiClose' command to close the sidebar terminal
+-- @return nil
+function ideSidebar.close()
+  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+  local term = terminal.getActiveTerminals()[opts.id]
+  if not term then
+    log.warn('No terminal found with ID', opts.id)
+    return
+  end
+  term:exit()
 end
 
 --- Get active terminals and tmux sessions
@@ -517,6 +496,27 @@ function ideSidebar.createDeterministicId(cmd, env, idx)
   idStr = string.gsub(idStr, '[%s%p]', '_')
   idStr = string.gsub(idStr, '[_]+', '_')
   return idStr
+end
+
+--- Switch sidebar style to preset or specified preset
+-- If no preset provided, cycle to next preset in list
+-- Used by 'GeminiSwitchSidebarStyle' command to change appearance
+-- @param presetName? string The name of the preset to switch to.
+-- @return nil
+function ideSidebar.switchStyle(presetName)
+  if not presetName or type(presetName) ~= 'string' then
+    presetName = presetKeys[ideSidebarState.lastPresetIdx % #presetKeys + 1]
+  end
+  for _, opts in ipairs(ideSidebarState.terminalOpts) do
+    local term = terminal.getActiveTerminals()[opts.id]
+    if term then
+      term:hide()
+      presetName = term:switch(presetName)
+    end
+    opts.win.preset = presetName
+  end
+  vim.defer_fn(ideSidebar.toggle, 100)
+  ideSidebarState.lastPresetIdx = getPresetIdx(presetName)
 end
 
 -------------------------------------------------------
