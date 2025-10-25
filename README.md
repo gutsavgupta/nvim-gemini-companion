@@ -60,7 +60,7 @@ You can install the plugin using `lazy.nvim`:
   keys = {
     { "<leader>gs", "<cmd>GeminiSwitchSidebarStyle<cr>", desc = "Switch Sidebar Style"},
     { "<leader>gg", "<cmd>GeminiToggle<cr>", desc = "Toggle cli agents in sidebar"},
-    { "<leader>gt", "<cmd>GeminiToggleTmux<cr>", desc = "Toggle cli agents in a Tmux-window"},
+    { "<leader>gt", "<cmd>GeminiSwitchToCli<cr>", desc = "Spawn or switch to a tmux/sidebar cli session"},
     { "<leader>gc", "<cmd>GeminiClose<cr>", desc = "Close sidebar process"},
     { "<leader>gD", "<cmd>GeminiSendFileDiagnostic<cr>", desc = "Send File Diagnostics to an active session"},
     { "<leader>gd", "<cmd>GeminiSendLineDiagnostic<cr>", desc = "Send Line Diagnostics to an active session"},
@@ -98,18 +98,45 @@ The plugin provides the following commands:
 *   `:GeminiAccept` - Accept changes in diff view
 *   `:GeminiReject` - Reject changes in diff view
 *   `:GeminiAnnouncement [arg]` - Show plugin announcements; if no argument is provided, shows the latest announcement; if an argument is provided, shows the specific announcement version (e.g., `:GeminiAnnouncement v0.5_release`)
-*   `:GeminiToggleTmux [command]` - Spawn or switch to a tmux window with the specified CLI command. If no command is given, prompts for selection. This allows you to run your AI agents in separate tmux windows for better workflow management.
+*   `:GeminiSwitchToCli [type command]` - Switch to or spawn a CLI in either tmux or sidebar. If no arguments are provided, prompts for selection. When arguments are provided in the format `<type> <command>` (e.g., `tmux gemini` or `sidebar qwen`), it will spawn the specified command in the specified type. This allows you to run your AI agents in separate tmux windows or sidebar for better workflow management and session persistence.
 
 ## Tmux Support
 
 The plugin now includes built-in support for running AI agent sessions in separate tmux windows. This allows for better workflow management and session persistence. Key features include:
 
 *   **Session Persistence**: CLI connections maintain state across nvim sessions with port reuse
-*   **Easy Switching**: Use `:GeminiToggleTmux` to spawn or switch to existing tmux windows
-*   **Multiple Agent Support**: Each agent (gemini, qwen) gets its own tmux window with unique naming
+*   **Easy Switching**: Use `:GeminiSwitchToCli` to spawn or switch to existing tmux windows and sidebar terminals
+*   **Multiple Agent Support**: Each agent (gemini, qwen) gets its own tmux window or sidebar terminal with unique naming
 *   **Automatic Session Management**: Plugin tracks both sidebar and tmux sessions for unified experience
+*   **Unified Interface**: All CLI sessions (tmux and sidebar) are accessible through the same commands
 
 To use tmux functionality, you must be running neovim inside an active tmux session.
+
+## Enhanced CLI Switching with GeminiSwitchToCli
+
+The `:GeminiSwitchToCli` command offers advanced session management capabilities:
+
+### Usage
+*   `:GeminiSwitchToCli` - Prompt for selection between available sessions
+*   `:GeminiSwitchToCli tmux gemini` - Spawn or switch to gemini in a tmux window
+*   `:GeminiSwitchToCli sidebar qwen` - Spawn or switch to qwen in the sidebar terminal
+*   `:GeminiSwitchToCli tmux qwen` - Spawn or switch to qwen in a tmux window
+*   `:GeminiSwitchToCli sidebar gemini` - Spawn or switch to gemini in the sidebar terminal
+
+### Recommended Key Mappings
+Add these shortcuts to your configuration for quick access to specific CLI types:
+
+```lua
+keys = {
+  -- ... existing key mappings ...
+  { "<leader>g1", "<cmd>GeminiSwitchToCli tmux gemini<cr>", desc = "Switch to tmux gemini session" },
+  { "<leader>g2", "<cmd>GeminiSwitchToCli tmux qwen<cr>", desc = "Switch to tmux qwen session" },
+  { "<leader>g3", "<cmd>GeminiSwitchToCli sidebar gemini<cr>", desc = "Switch to sidebar gemini session" },
+  { "<leader>g4", "<cmd>GeminiSwitchToCli sidebar qwen<cr>", desc = "Switch to sidebar qwen session" },
+}
+```
+
+These shortcuts provide quick access to your preferred AI agent setup without having to type the full command each time.
 
 ## Picker Configuration
 
