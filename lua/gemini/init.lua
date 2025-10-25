@@ -300,4 +300,20 @@ function M.disableAutoread()
   log.info('Autoread disabled')
 end
 
+--- Get server status for health check
+function M.getServerStatus()
+  local status = {
+    initialized = initialized,
+    port = nil,
+    workspace = vim.fn.getcwd(),
+  }
+
+  if server and server.server then
+    local sockname = server.server:getsockname()
+    if sockname then status.port = sockname.port end
+  end
+
+  return status
+end
+
 return M
