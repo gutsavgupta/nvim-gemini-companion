@@ -140,27 +140,39 @@ M.getAnnouncementVersions = function()
 end
 
 --- Show a one-time announcement to users in a floating markdown window
--- This function is used to show the latest announcement only once during setup
+-- This function is used to show all unseen announcements during setup
 M.showOneTimeAnnouncement = function()
   local versions = M.getAnnouncementVersions()
-  if #versions > 0 then
-    local latestVersion = versions[#versions] -- Get the last (sorted) version
-    local runtime_files = vim.api.nvim_get_runtime_file(
-      'lua/gemini/announcements/' .. latestVersion .. '.md',
-      false
-    )
-    if #runtime_files > 0 then
-      local announcement_path = runtime_files[1]
-      local announcementKey = latestVersion .. '_announcement' -- Use a consistent key
-      if not hasSeenAnnouncement(announcementKey) then
+  local unseen_content = {}
+  local unseen_keys = {}
+
+  for i = #versions, 1, -1 do
+    local version = versions[i]
+    local announcementKey = version .. '_announcement'
+    if not hasSeenAnnouncement(announcementKey) then
+      local runtime_files = vim.api.nvim_get_runtime_file(
+        'lua/gemini/announcements/' .. version .. '.md',
+        false
+      )
+      if #runtime_files > 0 then
+        local announcement_path = runtime_files[1]
         local content = readFileContent(announcement_path)
-        if content ~= '' then
-          markAnnouncementSeen(announcementKey)
-          -- Schedule the announcement to show after the UI is ready
-          vim.schedule(function() showAnnouncementAsFloatingWindow(content) end)
+        if content and content ~= '' then
+          table.insert(unseen_content, content)
+          table.insert(unseen_keys, announcementKey)
         end
       end
     end
+  end
+
+  if #unseen_content > 0 then
+    local combined_content = table.concat(unseen_content, '\n\n---\n\n')
+    for _, key in ipairs(unseen_keys) do
+      markAnnouncementSeen(key)
+    end
+    vim.schedule(
+      function() showAnnouncementAsFloatingWindow(combined_content) end
+    )
   end
 end
 

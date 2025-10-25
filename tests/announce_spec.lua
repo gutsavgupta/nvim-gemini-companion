@@ -12,13 +12,6 @@ describe('announce', function()
     local originalIoOpen, originalIoClose
 
     before_each(function()
-      -- Create a test file with announcement content
-      local tempFile = io.open(tempFilePath, 'w')
-      if tempFile then
-        tempFile:write('# Test Announcement\n\nThis is a test announcement.')
-        tempFile:close()
-      end
-
       -- Store original functions
       originalStdpath = vim.fn.stdpath
       originalMkdir = vim.fn.mkdir
@@ -41,7 +34,10 @@ describe('announce', function()
       -- Mock the runtime file to return the existing announcement file
       vim.api.nvim_get_runtime_file = spy.new(function(path, all)
         if path:match('announcements') then
-          return { '/mock/path/lua/gemini/announcements/v0.5_release.md' }
+          return {
+            '/mock/path/lua/gemini/announcements/v0.5_release.md',
+            '/mock/path/lua/gemini/announcements/v0.6_release.md',
+          }
         else
           return {}
         end
@@ -50,10 +46,7 @@ describe('announce', function()
       io.close = spy.new(function(_) end) -- Mock io.close
 
       io.open = spy.new(function(path, mode)
-        if path:match('test_announcement.txt') and mode == 'r' then
-          -- Return nil to simulate file not found (first time)
-          return nil
-        elseif mode == 'w' then
+        if mode == 'w' then
           -- Return a mock file handle with write and close methods
           local mockFile = {
             write = function(_, _) return true end,
@@ -63,15 +56,23 @@ describe('announce', function()
         elseif path:match('v0.5_release.md') then
           local mockFile = {
             read = function(_, arg)
-              if arg == '*a' then
-                return '# Test Announcement\n\nThis is a test announcement.'
-              end
+              if arg == '*a' then return 'content v0.5' end
+              return nil
+            end,
+            close = function() end,
+          }
+          return mockFile
+        elseif path:match('v0.6_release.md') then
+          local mockFile = {
+            read = function(_, arg)
+              if arg == '*a' then return 'content v0.6' end
               return nil
             end,
             close = function() end,
           }
           return mockFile
         else
+          -- For reading seen files, the behavior is defined in each test
           return nil
         end
       end)
@@ -87,98 +88,71 @@ describe('announce', function()
       io.close = originalIoClose
 
       -- Clean up test files
-      os.remove(tempFilePath)
-      local seenFilePath = '/tmp/nvim-gemini-companion/test_announcement.txt'
-      os.remove(seenFilePath)
+      os.remove('/tmp/nvim-gemini-companion/v0.5_release_announcement.txt')
+      os.remove('/tmp/nvim-gemini-companion/v0.6_release_announcement.txt')
     end)
 
-    it('should show announcement if not seen before', function()
-      -- Reset the mock for the test announcement file not existing
-      -- In this test, we want the file to not exist initially (so io.open returns nil for 'r' mode)
+    it('should show announcements if none are seen', function()
       local originalOpen = io.open
       io.open = spy.new(function(path, mode)
-        if path:match('v0.5_release_announcement') and mode == 'r' then
-          -- Return nil to simulate file not found (first time)
-          return nil
-        elseif path:match('v0.5_release.md') then
-          local mockFile = {
-            read = function(_, arg)
-              if arg == '*a' then
-                return '# Test Announcement\n\nThis is a test announcement.'
-              end
-              return nil
-            end,
-            close = function() end,
-          }
-          return mockFile
-        elseif mode == 'w' then
-          -- Return a mock file handle with write and close methods for marking as seen
-          local mockFile = {
-            write = function(_, _) return true end,
-            close = function(_) return true end,
-          }
-          return mockFile
-        else
-          return nil
+        if
+          (
+            path:match('v0.5_release_announcement')
+            or path:match('v0.6_release_announcement')
+          ) and mode == 'r'
+        then
+          return nil -- not seen
         end
+        return originalOpen(path, mode)
       end)
 
-      -- Reset the schedule spy to track this specific call
       vim.schedule:clear()
       announce.showOneTimeAnnouncement()
-
-      -- Should have scheduled the announcement to be shown
       assert.spy(vim.schedule).was.called(1)
-
-      -- Restore original
       io.open = originalOpen
     end)
 
-    it('should not show announcement if already seen', function()
-      -- Reset the mock to simulate file already exists by changing io.open behavior
+    it('should not show announcements if all are seen', function()
+      local originalOpen = io.open
+      io.open = spy.new(function(path, mode)
+        if
+          (
+            path:match('v0.5_release_announcement')
+            or path:match('v0.6_release_announcement')
+          ) and mode == 'r'
+        then
+          return { close = function() end } -- seen
+        end
+        return originalOpen(path, mode)
+      end)
+
+      vim.schedule:clear()
+      announce.showOneTimeAnnouncement()
+      assert.spy(vim.schedule).was.called(0)
+      io.open = originalOpen
+    end)
+
+    it('should show one announcement if one is seen', function()
       local originalOpen = io.open
       io.open = spy.new(function(path, mode)
         if path:match('v0.5_release_announcement') and mode == 'r' then
-          -- Return a mock file handle to simulate file exists (already seen)
-          return { close = function() end }
-        elseif path:match('v0.5_release.md') then
-          local mockFile = {
-            read = function(_, arg)
-              if arg == '*a' then
-                return '# Test Announcement\n\nThis is a test announcement.'
-              end
-              return nil
-            end,
-            close = function() end,
-          }
-          return mockFile
-        elseif mode == 'w' then
-          -- Return a mock file handle with write and close methods
-          local mockFile = {
-            write = function(_, _) return true end,
-            close = function(_) return true end,
-          }
-          return mockFile
-        else
-          return nil
+          return { close = function() end } -- seen
         end
+        if path:match('v0.6_release_announcement') and mode == 'r' then
+          return nil -- not seen
+        end
+        return originalOpen(path, mode)
       end)
 
-      -- Reset the schedule spy to track this specific call
       vim.schedule:clear()
       announce.showOneTimeAnnouncement()
-
-      -- Should not have scheduled anything since the announcement was already seen
-      assert.spy(vim.schedule).was.called(0)
-
-      -- Restore original
+      assert.spy(vim.schedule).was.called(1)
       io.open = originalOpen
     end)
 
     it(
       'should not show announcement if no announcement files are available',
       function()
-        -- Mock vim.api.nvim_get_runtime_file to return empty table
         local originalGetRuntimeFile = vim.api.nvim_get_runtime_file
         vim.api.nvim_get_runtime_file = spy.new(function(_, _)
           return {} -- Return empty table to simulate no announcement files
