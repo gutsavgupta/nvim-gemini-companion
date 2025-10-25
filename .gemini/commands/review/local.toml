@@ -1,0 +1,17 @@
+description = "Review local changes (not yet committed)"
+prompt = """
+Review below local change: {{args}}
+
+Git Diff:
+!{git diff HEAD}
+
+Follow these steps:
+1. Review according to coding guidelines in GEMINI.md
+2. Check for potential bugs or issues
+3. Evaluate code quality and maintainability
+4. Identify security concerns (if any)
+5. Suggest improvements
+6. Summarize findings
+
+If violations or bugs are found, recommend fixes.
+"""

@@ -4,21 +4,56 @@ local M = {}
 M.serverStatus = function()
   local has_gemini, gemini = pcall(require, 'gemini')
   if not has_gemini or not gemini or not gemini.getServerStatus then
-    health.error('nvim-gemini-companion plugin not loaded')
+    health.error('nvim-gemini-companion plugin not in runtime')
     return
   end
   local serverStatus = gemini.getServerStatus()
   if not serverStatus.initialized then
-    health.error('MCP server not initialized')
+    health.error('nvim-gemini-companion not initialized')
     return
   end
   if not serverStatus.port or serverStatus.port == 0 then
-    health.error('MCP server not listening on a port')
+    health.warn('IDE server not started or listening on any port')
     return
   end
-  health.ok('MCP server is initialized')
-  health.ok('MCP server running on port ' .. tostring(serverStatus.port))
+  health.ok('IDE server is initialized')
+  health.ok('IDE server running on port ' .. tostring(serverStatus.port))
   health.ok('Workspace: ' .. serverStatus.workspace)
+end
+
+-- Checks for the server details file and reports its status.
+-- This helps diagnose issues with multiple Neovim instances or stale server files.
+M.checkServerDetails = function()
+  local hasPersistence, persistence = pcall(require, 'gemini.persistence')
+  if not hasPersistence then
+    health.warn('persistence module not available')
+    return
+  end
+
+  local serverDetailsPath = persistence.getServerDetailsPath()
+  local details = persistence.readServerDetails()
+
+  if not details then
+    health.warn('Server details file not found at: ' .. serverDetailsPath)
+    return
+  end
+
+  local currentPid = vim.fn.getpid()
+  if details.pid == currentPid then
+    health.ok(
+      'Server details file found: '
+        .. serverDetailsPath
+        .. ' (current nvim session)'
+    )
+  else
+    health.warn(
+      'Server details file found: '
+        .. serverDetailsPath
+        .. ' (another nvim session, PID: '
+        .. details.pid
+        .. ')'
+    )
+  end
 end
 
 M.check = function()
@@ -48,6 +83,9 @@ M.check = function()
 
   -- Check if mcp-server is initialized
   M.serverStatus()
+
+  -- Check for server details file from persistence module
+  M.checkServerDetails()
 end
 
 return M

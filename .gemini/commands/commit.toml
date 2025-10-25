@@ -1,0 +1,15 @@
+description = "Commit local changes with conventional commit message"
+prompt = """
+Check if we're on the main branch:
+current_branch = !{git branch --show-current}
+
+* If on main branch, create a new branch with an appropriate name
+* Stage all changes with `git add .`
+* Generate a concise commit message following the Conventional Commits specification from GEMINI.md:
+  - Format: <type>[optional scope]: <description>
+  - Type options: feat, fix, docs, style, refactor, perf, test, chore
+  - Description should be in present tense
+  - Example: 'feat(sidebar): Add toggle functionality'
+
+Commit the changes.
+"""

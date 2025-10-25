@@ -349,6 +349,9 @@ end
 --- Switch to a CLI in either tmux or sidebar
 -- @param arg string The argument specifying the CLI to switch to
 -- @return nil
+-- TODO: this function doesn't handle duplicate commands
+-- i.e if someone configs {'qwen', 'qwen', 'gemini'} for 2 qwen and 1 gemini session
+-- we need to come up with better arg scheming may be 'tmux <cmd_idx>'
 function ideSidebar.switchToCli(arg)
   local cmds = {}
   local cmdToIdx = {}
