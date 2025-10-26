@@ -5,8 +5,13 @@ This file outlines the project structure and coding guidelines for the `nvim-gem
 ## Directory Structure
 
 *   `lua/`: Contains the Lua modules for the plugin.
+    *   `lua/gemini/`: The main plugin code.
+    *   `lua/gemini/announcements/`: Release announcement markdown files shown to users on updates.
 *   `tests/`: Contains the test files for the plugin.
-*   `lua/gemini/announcements/`: Release announcement markdown files shown to users on updates.
+*   `.github/workflows/`: Contains GitHub Actions workflows for continuous integration.
+*   `assets/`: Contains images and videos for the `README.md` and other documentation.
+*   `.stylua.toml`: Configuration for the `stylua` code formatter.
+*   `GEMINI.md`: This file, containing project guidelines for contributors.
 *   `README.md`: The main documentation for the plugin.
 
 ## Coding Guidelines

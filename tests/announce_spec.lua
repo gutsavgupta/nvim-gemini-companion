@@ -5,8 +5,6 @@ local assert = require('luassert')
 local spy = require('luassert.spy')
 
 describe('announce', function()
-  local tempFilePath = '/tmp/test_announcement_content.md'
-
   describe('showOneTimeAnnouncement', function()
     local originalStdpath, originalMkdir, originalSchedule, originalNvimGetRuntimeFile
     local originalIoOpen, originalIoClose
@@ -32,7 +30,7 @@ describe('announce', function()
       vim.schedule = spy.new(function(fn) fn() end) -- Execute immediately for testing
 
       -- Mock the runtime file to return the existing announcement file
-      vim.api.nvim_get_runtime_file = spy.new(function(path, all)
+      vim.api.nvim_get_runtime_file = spy.new(function(path)
         if path:match('announcements') then
           return {
             '/mock/path/lua/gemini/announcements/v0.5_release.md',
@@ -88,8 +86,8 @@ describe('announce', function()
       io.close = originalIoClose
 
       -- Clean up test files
-      os.remove('/tmp/nvim-gemini-companion/v0.5_release_announcement.txt')
-      os.remove('/tmp/nvim-gemini-companion/v0.6_release_announcement.txt')
+      os.remove('/tmp/test_announcement_v0.5_release.txt')
+      os.remove('/tmp/test_announcement_v0.6_release.txt')
     end)
 
     it('should show announcements if none are seen', function()
@@ -160,10 +158,8 @@ describe('announce', function()
 
         vim.schedule:clear()
         announce.showOneTimeAnnouncement()
-
         -- Should not have scheduled anything since no announcement files exist
         assert.spy(vim.schedule).was.called(0)
-
         -- Restore original
         vim.api.nvim_get_runtime_file = originalGetRuntimeFile
       end
@@ -183,7 +179,7 @@ describe('announce', function()
 
     it('should return a sorted list of announcement versions', function()
       -- Mock to return some test files
-      vim.api.nvim_get_runtime_file = spy.new(function(path, all)
+      vim.api.nvim_get_runtime_file = spy.new(function(path, _)
         if path:match('announcements') then
           return {
             '/mock/path/lua/gemini/announcements/v0.5_release.md',
@@ -195,8 +191,6 @@ describe('announce', function()
       end)
 
       local versions = announce.getAnnouncementVersions()
-
-      -- Should return sorted versions
       assert.are.equal(3, #versions)
       assert.are.same(
         { 'v0.4_release', 'v0.5_release', 'v0.6_release' },
@@ -206,13 +200,12 @@ describe('announce', function()
 
     it('should return empty table when no announcement files exist', function()
       -- Mock to return empty list
-      vim.api.nvim_get_runtime_file = spy.new(function(path, all)
+      vim.api.nvim_get_runtime_file = spy.new(function(path)
         if path:match('announcements') then return {} end
         return {}
       end)
 
       local versions = announce.getAnnouncementVersions()
-
       -- Should return empty table
       assert.are.equal(0, #versions)
     end)
@@ -250,7 +243,7 @@ describe('announce', function()
         end
       end)
 
-      vim.api.nvim_get_runtime_file = spy.new(function(path, all)
+      vim.api.nvim_get_runtime_file = spy.new(function(path, _)
         if path:match('announcements/v0.5_release.md') then
           return { '/mock/path/lua/gemini/announcements/v0.5_release.md' }
         else
@@ -309,7 +302,7 @@ describe('announce', function()
 
     it('should show warning for invalid announcement version', function()
       -- Mock to return a different version to simulate invalid version
-      vim.api.nvim_get_runtime_file = spy.new(function(path, all)
+      vim.api.nvim_get_runtime_file = spy.new(function(path)
         if path:match('announcements/nonexistent.md') then
           return {}
         else
@@ -327,8 +320,7 @@ describe('announce', function()
 
     it('should show warning when no announcement files exist', function()
       -- Mock to return empty list for all files
-      vim.api.nvim_get_runtime_file = spy.new(function(path, all) return {} end)
-
+      vim.api.nvim_get_runtime_file = spy.new(function() return {} end)
       vim.schedule:clear()
       announce.showAnnouncement()
 
@@ -350,9 +342,7 @@ describe('announce', function()
 
       -- Replace showOneTimeAnnouncement with a spy
       announce.__metatable = false -- Disable metatable protection if present
-      local oldShowOneTime = announce.showOneTimeAnnouncement
       announce.showOneTimeAnnouncement = spy.new(function() end)
-
       vim.api.nvim_create_user_command = spy.new(function() end)
 
       vim.api.nvim_get_runtime_file = function(path, all)
@@ -373,11 +363,7 @@ describe('announce', function()
 
     it('should call showOneTimeAnnouncement and create user command', function()
       announce.setup()
-
-      -- Should have called showOneTimeAnnouncement once
       assert.spy(announce.showOneTimeAnnouncement).was.called(1)
-
-      -- Should have created user command
       assert.spy(vim.api.nvim_create_user_command).was.called(1)
     end)
   end)

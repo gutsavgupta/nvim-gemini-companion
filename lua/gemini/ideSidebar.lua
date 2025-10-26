@@ -20,6 +20,10 @@ local ideSidebarState = {
   terminalOpts = {},
 }
 
+local cwdBase =
+  string.gsub(vim.fn.fnamemodify(vim.fn.getcwd(), ':t'), '[%s:]', '_')
+cwdBase = #cwdBase > 20 and string.sub(cwdBase, 1, 20) or cwdBase
+
 ----------------------------------------------------------------
 --- Helper Functions
 ----------------------------------------------------------------
@@ -63,71 +67,79 @@ local function sortTableRecursively(t)
   return sorted
 end
 
-----------------------------------------------------------------
---- IDE Sidebar class public methods
-----------------------------------------------------------------
---- Toggle the sidebar terminal
--- Used by 'GeminiToggle' command to show/hide the sidebar terminal
--- @return nil
-function ideSidebar.toggle()
-  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
-  local term = terminal.getActiveTerminals()[opts.id]
-  if not term then
-    term = terminal.create(opts.cmd, opts)
+-- Check if running inside a tmux session
+-- @return boolean True if running in tmux, false otherwise
+local function isTmux() return os.getenv('TMUX') ~= nil end
+
+-- Find a tmux window by name
+-- @param windowName string The name of the window to look for
+-- @return string|nil The tmux window ID (e.g., '@1') or nil if not found
+local function findMatchingTmuxWindow(windowName)
+  local command = 'tmux list-windows -F "#{window_name},#{window_id}"'
+  local handle = io.popen(command)
+  if not handle then return nil end
+  local result = handle:read('*a')
+  handle:close()
+
+  for line in result:gmatch('[^\n]+') do
+    local name, id = line:match('^(.*),(.*)')
+    if name and name == windowName then return id end
+  end
+
+  return nil
+end
+
+-- Helper function to spawn tmux window with proper configuration
+-- @param optIndex number The index of the option in terminalOpts
+-- @param cmd string|nil The command to execute
+-- @param env table|nil The environment variables table
+local function spawnTmuxWithConfig(optIndex)
+  if not isTmux() then
+    vim.notify('Not running in a tmux session.', vim.log.levels.WARN)
     return
   end
-  term:toggle()
-end
+  local opt = ideSidebarState.terminalOpts[optIndex]
+  local cmd = opt.cmd
+  local env = opt.env
+  if not cmd then return end
+  local windowName = string.format('%s-ngc-%d(%s)', cwdBase, optIndex, cmd)
 
---- Close the sidebar terminal
--- Used by 'GeminiClose' command to close the sidebar terminal
--- @return nil
-function ideSidebar.close()
-  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
-  local term = terminal.getActiveTerminals()[opts.id]
-  if not term then
-    log.warn('No terminal found with ID', opts.id)
-    return
-  end
-  term:exit()
-end
-
---- Switch to next sidebar terminal in command list
--- Hide current terminal and open next one in list
--- Used when multiple commands configured and Tab pressed in terminal mode
--- @return nil
-function ideSidebar.switchTerms()
-  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
-  terminal.create(opts.cmd, opts):hide()
-  ideSidebarState.lastActiveIdx = (
-    ideSidebarState.lastActiveIdx % #ideSidebarState.terminalOpts
-  ) + 1
-
-  local nextOpts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
-  terminal.create(nextOpts.cmd, nextOpts):show()
-end
-
---- Switch sidebar style to preset or specified preset
--- If no preset provided, cycle to next preset in list
--- Used by 'GeminiSwitchSidebarStyle' command to change appearance
--- @param presetName? string The name of the preset to switch to.
--- @return nil
-function ideSidebar.switchStyle(presetName)
-  if not presetName or type(presetName) ~= 'string' then
-    presetName = presetKeys[ideSidebarState.lastPresetIdx % #presetKeys + 1]
-  end
-  for _, opts in ipairs(ideSidebarState.terminalOpts) do
-    local term = terminal.getActiveTerminals()[opts.id]
-    if term then
-      term:hide()
-      presetName = term:switch(presetName)
+  local windowId = findMatchingTmuxWindow(windowName)
+  if windowId then
+    -- Window exists, switch to it
+    os.execute('tmux select-window -t ' .. windowId)
+  else
+    -- Window does not exist, create it with proper environment variables
+    local envCmd = ''
+    if type(env) == 'table' then
+      for key, value in pairs(env) do
+        envCmd = envCmd
+          .. string.format('%s="%s" ', tostring(key), tostring(value))
+      end
     end
-    opts.win.preset = presetName
+
+    os.execute(
+      'tmux new-window -n "' .. windowName .. '" "' .. envCmd .. cmd .. '"'
+    )
   end
-  vim.defer_fn(ideSidebar.toggle, 100)
-  ideSidebarState.lastPresetIdx = getPresetIdx(presetName)
 end
 
+local function spawnSidebarWithConfig(optIndex)
+  if ideSidebarState.lastActiveIdx ~= optIndex then
+    local activeOpt =
+      ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+    local term = terminal.getActiveTerminals()[activeOpt.id]
+    if term then term:hide() end
+  end
+  local opt = ideSidebarState.terminalOpts[optIndex]
+  local term = terminal.create(opt.cmd, opt)
+  ideSidebarState.lastActiveIdx = optIndex
+  term:show()
+end
+
+----------------------------------------------------------------
+--- Public Methods
+----------------------------------------------------------------
 --- Send diagnostic information to sidebar terminal
 -- Filter and format diagnostics from specified buffer and line number,
 -- send as JSON to active terminal for analysis
@@ -136,32 +148,45 @@ end
 -- @return nil
 function ideSidebar.sendDiagnostic(bufnr, linenumber)
   local diagnostics = vim.diagnostic.get(bufnr)
-  if not diagnostics or #diagnostics == -1 then
+  if not diagnostics or #diagnostics == 0 then
     log.info('No diagnostics found for buffer ' .. bufnr)
     return
   end
 
   local filename = vim.api.nvim_buf_get_name(bufnr)
-  local filteredDiagnostics = {}
+  local formattedDiagnostics = {}
   for _, diag in ipairs(diagnostics) do
     -- LSP is 0-indexed, user is 1-indexed
     if linenumber == nil or (diag.lnum + 1) == linenumber then
-      table.insert(filteredDiagnostics, {
-        linenumber = diag.lnum + 1,
-        severity = vim.diagnostic.severity[diag.severity],
-        message = diag.message,
-        source = diag.source,
-      })
+      local severity = vim.diagnostic.severity[diag.severity]
+      local line = diag.lnum + 1
+      local message = diag.message
+      local source = diag.source or ''
+
+      -- Get the line content from the buffer
+      local lineContent =
+        vim.api.nvim_buf_get_lines(bufnr, diag.lnum, diag.lnum + 1, false)
+      local content = lineContent[1] or ''
+      -- Truncate long lines for readability
+      if string.len(content) > 80 then
+        content = string.sub(content, 1, 80) .. '...'
+      end
+
+      local formattedMessage = string.format(
+        'L%d:%s - {%s}[%s] %s',
+        line,
+        content,
+        source,
+        severity,
+        message
+      )
+      table.insert(formattedDiagnostics, formattedMessage)
     end
   end
 
-  if #filteredDiagnostics == 0 then return end
-  local diagnosticData = {
-    filename = filename,
-    diagnostics = filteredDiagnostics,
-  }
-
-  local diagnosticString = vim.fn.json_encode(diagnosticData)
+  if #formattedDiagnostics == 0 then return end
+  local diagnosticString = string.format('file:%s\n', filename)
+    .. table.concat(formattedDiagnostics, '\n')
   ideSidebar.sendText(diagnosticString)
 end
 
@@ -216,9 +241,58 @@ end
 -- @param text string The text to send to the terminal
 -- @return nil
 function ideSidebar.sendText(text)
-  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
-  local term = terminal.create(opts.cmd, opts)
+  local activeSessions = ideSidebar.getActiveTerminals()
+  local routeTextToSession = function(sessionName)
+    if string.match(sessionName, '^sidebar:') then
+      -- routing to sidebar term session
+      local term = nil
+      local activeTerms = terminal.getActiveTerminals()
+      for idx, activeTerm in pairs(activeTerms) do
+        local name = activeTerm.config.name or idx
+        if name == string.gsub(sessionName, '^sidebar:', '') then
+          term = activeTerm
+          break
+        end
+      end
+      if not term then
+        vim.notify(
+          string.format('Session %s not found', sessionName),
+          vim.log.levels.ERROR
+        )
+        return
+      end
+      ideSidebar.sendTextToTerm(term, text)
+    else
+      -- routing to tmux session
+      sessionName = string.gsub(sessionName, '^tmux:', '')
+      ideSidebar.sendTextToTmux(sessionName, text)
+    end
+  end
 
+  if #activeSessions == 0 then
+    -- Fallback to lastActiveTerminal if no active sessions found
+    local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+    local term = terminal.create(opts.cmd, opts)
+    ideSidebar.sendTextToTerm(term, text)
+    return
+  elseif #activeSessions == 1 then
+    routeTextToSession(activeSessions[1])
+  else
+    -- Multiple active sessions, prompt user to select one
+    vim.ui.select(activeSessions, {
+      prompt = 'Select a session to send text to:',
+    }, function(choice)
+      if not choice then return end
+      routeTextToSession(choice)
+    end)
+  end
+end
+
+--- Send text to a specific terminal
+-- @param term table The terminal object to send text to
+-- @param text string The text to send to the terminal
+-- @return nil
+function ideSidebar.sendTextToTerm(term, text)
   if not term.buf or not vim.api.nvim_buf_is_valid(term.buf) then
     term:exit()
     log.debug('No valid buffer found for terminal')
@@ -233,10 +307,268 @@ function ideSidebar.sendText(text)
   end
 
   local bracketStart = '\27[200~'
-  local bracketEnd = '\27[201~\r'
+  local bracketEnd = '\27[201~'
   local bracketedText = bracketStart .. text .. bracketEnd
   vim.api.nvim_chan_send(channel, bracketedText)
+
+  -- Hide the currently active terminal
+  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+  local currentTerm = terminal.getActiveTerminals()[opts.id]
+  if
+    currentTerm
+    and currentTerm ~= term
+    and currentTerm.win
+    and vim.api.nvim_win_is_valid(currentTerm.win)
+  then
+    currentTerm:hide()
+  end
+
+  -- Find the terminal id for the term we're sending to
+  for i, opt in ipairs(ideSidebarState.terminalOpts) do
+    if opt.id == term.id then
+      ideSidebarState.lastActiveIdx = i
+      break
+    end
+  end
+
   term:show()
+end
+
+--- Send text to a specific tmux session
+-- @param sessionName string The name of the tmux session
+-- @param text string The text to send to the tmux session
+-- @return nil
+function ideSidebar.sendTextToTmux(sessionName, text)
+  local bracketStart = '\27[200~'
+  local bracketEnd = '\27[201~'
+  local bracketedText = bracketStart .. text .. bracketEnd
+  vim.system(
+    { 'tmux', 'load-buffer', '-b', 'ngcbuffer0', '-' },
+    { stdin = bracketedText },
+    function(result)
+      if result.code == 0 then
+        os.execute(
+          string.format('tmux paste-buffer -b ngcbuffer0 -t "%s"', sessionName)
+        )
+        os.execute(string.format('tmux select-window -t "%s"', sessionName))
+      else
+        vim.schedule(
+          function()
+            vim.notify('Failed to send text to tmux', vim.log.levels.ERROR)
+          end
+        )
+      end
+    end
+  )
+end
+
+--- Switch to a CLI in either tmux or sidebar
+-- @param arg string The argument specifying the CLI to switch to, in the format "<type> <cmd_idx>" (e.g., "tmux 1").
+-- If no arg is provided, a selection UI will be shown.
+-- @return nil
+function ideSidebar.switchToCli(arg)
+  local cmdsForSelect = {}
+  for idx, opt in ipairs(ideSidebarState.terminalOpts) do
+    -- The format for display in selection UI
+    table.insert(cmdsForSelect, string.format('sidebar %d %s', idx, opt.cmd))
+    table.insert(cmdsForSelect, string.format('tmux %d %s', idx, opt.cmd))
+  end
+
+  if not arg or arg == '' then
+    table.sort(cmdsForSelect)
+    vim.ui.select(cmdsForSelect, {
+      prompt = 'Select a command to spawn:',
+    }, function(choice)
+      if not choice then return end
+      -- The choice is in the format "type idx cmd". We need "type idx".
+      local parts = vim.split(choice, ' ', { trimempty = true })
+      ideSidebar.switchToCli(parts[1] .. ' ' .. parts[2])
+    end)
+    return
+  end
+
+  -------------------------------------------------------------
+  --- arg have a valid value
+  -------------------------------------------------------------
+  local parts = vim.split(arg, ' ', { trimempty = true })
+  if #parts < 2 then
+    vim.notify(
+      'Invalid argument. Expected <type> <cmd_idx> or <type> <cmd>.',
+      vim.log.levels.ERROR
+    )
+    return
+  end
+
+  local windowType = parts[1]
+  local cmdIdentifier = parts[2]
+  local idx = tonumber(cmdIdentifier)
+
+  if not idx then
+    -- Best effort for backward compatibility: find first match for the command name
+    for i, opt in ipairs(ideSidebarState.terminalOpts) do
+      if opt.cmd == cmdIdentifier then
+        idx = i
+        break
+      end
+    end
+  end
+
+  if not idx or not ideSidebarState.terminalOpts[idx] then
+    local validCmds = {}
+    for i, opt in ipairs(ideSidebarState.terminalOpts) do
+      table.insert(
+        validCmds,
+        string.format("'%s %d' (%s)", 'sidebar', i, opt.cmd)
+      )
+      table.insert(validCmds, string.format("'%s %s'", 'sidebar', opt.cmd))
+      table.insert(validCmds, string.format("'%s %d' (%s)", 'tmux', i, opt.cmd))
+      table.insert(validCmds, string.format("'%s %s'", 'tmux', opt.cmd))
+    end
+    vim.notify(
+      string.format(
+        'Invalid command identifier: "%s". Should be a valid index or command name. Valid options are: %s',
+        cmdIdentifier,
+        table.concat(validCmds, ', ')
+      ),
+      vim.log.levels.ERROR
+    )
+    return
+  end
+
+  if windowType == 'tmux' then
+    spawnTmuxWithConfig(idx)
+  elseif windowType == 'sidebar' then
+    spawnSidebarWithConfig(idx)
+  else
+    vim.notify(
+      string.format(
+        'Invalid window type: %s. Should be "tmux" or "sidebar".',
+        windowType
+      ),
+      vim.log.levels.ERROR
+    )
+  end
+end
+
+--- Switch to next sidebar terminal in command list
+-- Hide current terminal and open next one in list
+-- Used when multiple commands configured and Tab pressed in terminal mode
+-- @return nil
+function ideSidebar.switchTerms()
+  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+  terminal.create(opts.cmd, opts):hide()
+  ideSidebarState.lastActiveIdx = (
+    ideSidebarState.lastActiveIdx % #ideSidebarState.terminalOpts
+  ) + 1
+
+  local nextOpts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+  terminal.create(nextOpts.cmd, nextOpts):show()
+end
+
+--- Toggle the sidebar terminal
+-- Used by 'GeminiToggle' command to show/hide the sidebar terminal
+-- @return nil
+function ideSidebar.toggle()
+  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+  local term = terminal.getActiveTerminals()[opts.id]
+  if not term then
+    term = terminal.create(opts.cmd, opts)
+    return
+  end
+  term:toggle()
+end
+
+--- Close the sidebar terminal
+-- Used by 'GeminiClose' command to close the sidebar terminal
+-- @return nil
+function ideSidebar.close()
+  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
+  local term = terminal.getActiveTerminals()[opts.id]
+  if not term then
+    log.warn('No terminal found with ID', opts.id)
+    return
+  end
+  term:exit()
+end
+
+--- Get active terminals and tmux sessions
+-- Combines active terminals from terminal.lua with tmux sessions named ngc-agent(*)
+-- @return table A list of active sessions with prefixed names
+function ideSidebar.getActiveTerminals()
+  -- Get active terminals from terminal.lua
+  local activeTerminals = terminal.getActiveTerminals()
+  local combinedSessions = {}
+
+  -- Validate and add active terminals
+  for id, term in pairs(activeTerminals) do
+    if term.buf and vim.api.nvim_buf_is_valid(term.buf) then
+      local termName = 'sidebar:' .. (term.config.name or id)
+      table.insert(combinedSessions, termName)
+    end
+  end
+
+  -- Find matching tmux sessions
+  if isTmux() then
+    local command = 'tmux list-windows -F "#{window_name},#{window_id}"'
+    local handle = io.popen(command)
+    if handle then
+      local pattern = string.format('%s-ngc-', cwdBase)
+      local result = handle:read('*a')
+      handle:close()
+      for line in result:gmatch('[^\n]+') do
+        local sessionName, _ = line:match('^(.*),(.*)')
+        if
+          sessionName and vim.fn.match(sessionName, '\\V' .. pattern) ~= -1
+        then
+          local tmuxSessionName = 'tmux:' .. sessionName
+          table.insert(combinedSessions, tmuxSessionName)
+        end
+      end
+    end
+  end
+
+  return combinedSessions
+end
+
+--- Create a deterministic ID from command and environment
+-- Sorts the environment recursively and replaces special chars with underscores
+-- @param cmd string The command name
+-- @param env table The environment table
+-- @param idx number The index of the terminal
+-- @return string A deterministic ID string
+function ideSidebar.createDeterministicId(cmd, env, idx)
+  local sortedEnv = sortTableRecursively(env)
+  local idStr = cmd
+    .. ':'
+    .. vim.inspect(sortedEnv, { newline = '', indent = '' })
+    .. (idx and ':' .. idx or '')
+  -- Replace whitespace and special characters with underscores
+  -- to make it more deterministic, also replace subsequent underscores
+  -- with a single underscore
+  idStr = string.gsub(idStr, '[%s%p]', '_')
+  idStr = string.gsub(idStr, '[_]+', '_')
+  return idStr
+end
+
+--- Switch sidebar style to preset or specified preset
+-- If no preset provided, cycle to next preset in list
+-- Used by 'GeminiSwitchSidebarStyle' command to change appearance
+-- @param presetName? string The name of the preset to switch to.
+-- @return nil
+function ideSidebar.switchStyle(presetName)
+  if not presetName or type(presetName) ~= 'string' then
+    presetName = presetKeys[ideSidebarState.lastPresetIdx % #presetKeys + 1]
+  end
+  for _, opts in ipairs(ideSidebarState.terminalOpts) do
+    local term = terminal.getActiveTerminals()[opts.id]
+    if term then
+      term:hide()
+      presetName = term:switch(presetName)
+    end
+    opts.win.preset = presetName
+  end
+  vim.defer_fn(ideSidebar.toggle, 100)
+  ideSidebarState.lastPresetIdx = getPresetIdx(presetName)
 end
 
 -------------------------------------------------------
@@ -278,12 +610,15 @@ function ideSidebar.setup(opts)
   --- Creating Opts for Each Terminal
   -------------------------------------------------------
   opts = vim.tbl_deep_extend('force', defaults, opts)
+  ideSidebarState.port = opts.port
   if opts.cmd then opts.cmds = { opts.cmd } end
   for idx, cmd in ipairs(opts.cmds) do
     local termOpts =
       vim.tbl_deep_extend('force', vim.deepcopy(opts), { cmd = cmd })
     local onBuffer = termOpts.on_buf
-    termOpts.name = string.format('Agent %d: %s', idx, cmd)
+    local name = string.format('%s-ngc-%d(%s)', cwdBase, idx, cmd)
+
+    termOpts.name = name
     termOpts.env.TERM_PROGRAM = 'vscode'
     if string.find(termOpts.cmd, 'qwen') then
       if termOpts.cmd == 'qwen' and vim.fn.executable('qwen') == 0 then
@@ -337,6 +672,28 @@ function ideSidebar.setup(opts)
   )
 
   vim.api.nvim_create_user_command(
+    'GeminiSwitchToCli',
+    function(cmdOpts) ideSidebar.switchToCli(table.concat(cmdOpts.fargs, ' ')) end,
+    {
+      nargs = '*',
+      desc = 'Switch to cli with <type> <cmd_idx|cmd> or select one',
+      complete = function(_, cmdline, _)
+        local parts = vim.split(cmdline, ' ', true)
+        if #parts == 2 then
+          return { 'sidebar', 'tmux' }
+        elseif #parts == 3 then
+          local completions = {}
+          for i, opt in ipairs(ideSidebarState.terminalOpts) do
+            table.insert(completions, tostring(i) .. ' ' .. opt.cmd)
+          end
+          return completions
+        end
+        return {}
+      end,
+    }
+  )
+
+  vim.api.nvim_create_user_command(
     'GeminiSwitchSidebarStyle',
     function(cmdOpts) ideSidebar.switchStyle(cmdOpts.fargs[1]) end,
     {
@@ -379,28 +736,6 @@ function ideSidebar.setup(opts)
       desc = 'Close Gemini sidebar',
     }
   )
-end
-
-----------------------------------------------------------------
---- Helper Methods
-----------------------------------------------------------------
--- Create a deterministic ID from command and environment
--- Sorts the environment recursively and replaces special chars with underscores
--- @param cmd string The command name
--- @param env table The environment table
--- @return string A deterministic ID string
-function ideSidebar.createDeterministicId(cmd, env, idx)
-  local sortedEnv = sortTableRecursively(env)
-  local idStr = cmd
-    .. ':'
-    .. vim.inspect(sortedEnv, { newline = '', indent = '' })
-    .. (idx and ':' .. idx or '')
-  -- Replace whitespace and special characters with underscores
-  -- to make it more deterministic, also replace subsequent underscores
-  -- with a single underscore
-  idStr = string.gsub(idStr, '[%s%p]', '_')
-  idStr = string.gsub(idStr, '[_]+', '_')
-  return idStr
 end
 
 -------------------------------------------------------

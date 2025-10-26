@@ -70,7 +70,17 @@ end
 --- @param port number The port to listen on. If 0, a random available port is used.
 --- @return number The port the server is listening on, useful when port 0 is provided.
 function IdeMcpServer:start(port)
-  self.server:bind('127.0.0.1', port)
+  local ok, berr = self.server:bind('127.0.0.1', port)
+  if not ok then
+    vim.notify(
+      string.format(
+        'Error binding to port %d: %s\ntmux clis needs to be restarted',
+        port,
+        berr
+      )
+    )
+    self.server.bind('127.0.0.1', 0)
+  end
   self.server:listen(64, function(err)
     if err then
       log.error('ideMcpServer: listen error: ' .. tostring(err))
@@ -123,6 +133,11 @@ end
 function IdeMcpServer:close()
   log.info('ideMcpServer: closing server')
   for _, client in pairs(self.clientsObj) do
+    if client.isMcpStream then
+      -- proper client-close does doen't trigger disconnection on gemini/qwen clis
+      -- sending an error json in shutdown case is a hack to achieve the same
+      client.tcpClient:write('data:{error-json\n\n')
+    end
     client:close()
   end
   if not self.server:is_closing() then self.server:close() end
@@ -373,6 +388,7 @@ function IdeMcpClient:_parseHttpMsg()
         header['method']
       )
     )
+    self.tcpClient:write('HTTP/1.1 405 Method Not Allowed\r\n\r\n')
     self:close()
     return
   end

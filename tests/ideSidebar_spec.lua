@@ -14,7 +14,7 @@ describe('ideSidebar', function()
 
     -- Create a mock for the terminal module
     terminalMock = {
-      create = spy.new(function(cmd, config)
+      create = spy.new(function(_, _)
         return {
           toggle = spy.new(function() end),
           exit = spy.new(function() end),
@@ -22,7 +22,7 @@ describe('ideSidebar', function()
           show = spy.new(function() end),
           switch = spy.new(function() end),
           buf = 1,
-          id = config and config.id or 'test-id',
+          id = 'test-id',
         }
       end),
       getActiveTerminals = spy.new(function()
@@ -48,18 +48,50 @@ describe('ideSidebar', function()
     vim.api.nvim_buf_get_lines = spy.new(function() return { 'test line' } end)
     vim.api.nvim_create_user_command = spy.new(function() end)
     vim.defer_fn = spy.new(function() end) -- Don't execute immediately for tests
+    vim.ui.select = spy.new(function(items, _, callback)
+      if #items > 0 and callback then
+        callback(items[1]) -- Select first item by default for tests
+      end
+    end)
+    vim.notify = spy.new(function() end)
+    vim.system = spy.new(function(_, _, callback)
+      if callback then
+        callback({ code = 0 }) -- Simulate success by default
+      end
+    end)
 
     -- Override require for terminal to return our mock
-    local original_require = require
-    _G.require = function(module_name)
-      if module_name == 'gemini.terminal' then
+    local originalRequire = require
+    _G.require = function(moduleName)
+      if moduleName == 'gemini.terminal' then
         return terminalMock
       else
-        return original_require(module_name)
+        return originalRequire(moduleName)
       end
     end
 
     ideSidebar = require('gemini.ideSidebar')
+
+    -- Mock the new tmux-related functions to avoid interfering with production tmux sessions
+    ideSidebar.getActiveTerminals = function()
+      -- Return only sidebar terminals, not real tmux sessions
+      local activeTerminals = terminalMock.getActiveTerminals()
+      local combinedSessions = {}
+
+      -- Validate and add active terminals
+      for id, term in pairs(activeTerminals) do
+        if term.buf and vim.api.nvim_buf_is_valid(term.buf) then
+          local termName = 'sidebar:' .. (term.config.name or id)
+          table.insert(combinedSessions, termName)
+        end
+      end
+
+      return combinedSessions
+    end
+
+    -- Mock the new functions to avoid real tmux interactions
+    ideSidebar.sendTextToTmux = spy.new(function(_, _) end)
+    ideSidebar.spawnOrSwitchToTmux = spy.new(function(_) end)
   end)
 
   after_each(function()
@@ -81,9 +113,9 @@ describe('ideSidebar', function()
       ideSidebar.setup({ cmd = 'gemini', port = 12345 })
 
       -- Verify that vim.api.nvim_create_user_command was called for each expected command
-      -- There are 6 commands: GeminiToggle, GeminiSwitchSidebarStyle, GeminiSend,
-      -- GeminiSendFileDiagnostic, GeminiSendLineDiagnostic, GeminiClose
-      assert.spy(vim.api.nvim_create_user_command).was.called(6)
+      -- There are 7 commands: GeminiToggle, GeminiSwitchSidebarStyle, GeminiSend,
+      -- GeminiSendFileDiagnostic, GeminiSendLineDiagnostic, GeminiClose, GeminiToggleTmux
+      assert.spy(vim.api.nvim_create_user_command).was.called(7)
     end)
   end)
 
@@ -293,88 +325,105 @@ describe('ideSidebar', function()
   end)
 
   describe('sendDiagnostic method', function()
-    it('should send diagnostic information to terminal as JSON', function()
-      -- Setup for a single command
-      ideSidebar.setup({ cmd = 'gemini', port = 12345 })
+    it(
+      'should send diagnostic information to terminal in the correct format',
+      function()
+        -- Setup for a single command
+        ideSidebar.setup({ cmd = 'gemini', port = 12345 })
 
-      -- Create mock terminal
-      local cmd = 'gemini'
-      local env = {
-        GEMINI_CLI_IDE_WORKSPACE_PATH = '/test/dir',
-        GEMINI_CLI_IDE_SERVER_PORT = '12345',
-        TERM_PROGRAM = 'vscode',
-      }
-      local expectedId = ideSidebar.createDeterministicId(cmd, env)
-
-      local mockTerm = {
-        show = spy.new(function() end),
-      }
-
-      local activeTerminals = {}
-      activeTerminals[expectedId] = mockTerm
-      terminalMock.getActiveTerminals = function() return activeTerminals end
-
-      -- Mock creating a terminal
-      terminalMock.create = spy.new(function(cmd, config) return mockTerm end)
-
-      -- Mock diagnostics - the lnum is 0-indexed, so line 5 in the test means line 6 when +1
-      local mockDiagnostics = {
-        {
-          lnum = 5, -- line number (0-indexed) -> line 6 (1-indexed)
-          col = 10,
-          severity = vim.diagnostic.severity.ERROR,
-          message = 'Test error message',
-          source = 'test-source',
-        },
-      }
-
-      -- Mock terminal creation for when sendText calls terminal.create
-      local originalCreate = terminalMock.create
-      terminalMock.create = spy.new(function(cmd, config)
-        return {
-          buf = 1,
-          show = spy.new(function() end),
-          exit = spy.new(function() end),
+        -- Create mock terminal
+        local cmd = 'gemini'
+        local env = {
+          GEMINI_CLI_IDE_WORKSPACE_PATH = '/test/dir',
+          GEMINI_CLI_IDE_SERVER_PORT = '12345',
+          TERM_PROGRAM = 'vscode',
         }
-      end)
+        local expectedId = ideSidebar.createDeterministicId(cmd, env)
 
-      -- Mock channel related functions for sendText to work properly
-      vim.api.nvim_buf_get_var = spy.new(function(buf, varname)
-        return 123 -- mock channel id
-      end)
-      vim.api.nvim_chan_send = spy.new(function(channel, text) end)
+        local mockTerm = {
+          show = spy.new(function() end),
+        }
 
-      -- Create a spy that captures the text parameter
-      local capturedText = nil
-      local sendTextSpy = spy.new(function(text) capturedText = text end)
-      local originalSendText = ideSidebar.sendText
-      ideSidebar.sendText = sendTextSpy
+        local activeTerminals = {}
+        activeTerminals[expectedId] = mockTerm
+        terminalMock.getActiveTerminals = function() return activeTerminals end
 
-      vim.diagnostic.get = spy.new(function(bufnr) return mockDiagnostics end)
-      vim.api.nvim_buf_get_name = spy.new(
-        function(bufnr) return 'testFile.lua' end
-      )
+        -- Mock creating a terminal
+        terminalMock.create = spy.new(function(cmd, config) return mockTerm end)
 
-      -- Call sendDiagnostic with nil line number to get all diagnostics
-      ideSidebar.sendDiagnostic(1, nil) -- bufnr = 1, no line filter
+        -- Mock diagnostics - the lnum is 0-indexed, so line 5 in the test means line 6 when +1
+        local mockDiagnostics = {
+          {
+            lnum = 5, -- line number (0-indexed) -> line 6 (1-indexed)
+            col = 10,
+            severity = vim.diagnostic.severity.ERROR,
+            message = 'Test error message',
+            source = 'test-source',
+          },
+        }
 
-      -- Restore original function
-      ideSidebar.sendText = originalSendText
-      terminalMock.create = originalCreate
+        -- Mock terminal creation for when sendText calls terminal.create
+        local originalCreate = terminalMock.create
+        terminalMock.create = spy.new(function(_, _)
+          return {
+            buf = 1,
+            show = spy.new(function() end),
+            exit = spy.new(function() end),
+          }
+        end)
 
-      -- Check if sendText was called and captured the text
-      assert.spy(sendTextSpy).was.called(1)
-      assert.truthy(capturedText)
-      assert.truthy(string.find(capturedText, 'testFile.lua'))
-      assert.truthy(string.find(capturedText, 'Test error message'))
-    end)
+        -- Mock channel related functions for sendText to work properly
+        vim.api.nvim_buf_get_var = spy.new(function(_, _)
+          return 123 -- mock channel id
+        end)
+        vim.api.nvim_chan_send = spy.new(function(_, _) end)
+
+        -- Mock nvim_buf_get_lines to return line content for diagnostics
+        vim.api.nvim_buf_get_lines = spy.new(function(bufnr, start, end_, _)
+          if start == 5 and end_ == 6 then -- lnum = 5 from mock, so get line 6 (0-indexed)
+            return { 'function test_line_content() end' } -- mock line content
+          else
+            return { '' } -- default empty line
+          end
+        end)
+
+        -- Create a spy that captures the text parameter
+        local capturedText = nil
+        local sendTextSpy = spy.new(function(text) capturedText = text end)
+        local originalSendText = ideSidebar.sendText
+        ideSidebar.sendText = sendTextSpy
+
+        vim.diagnostic.get = spy.new(function(_) return mockDiagnostics end)
+        vim.api.nvim_buf_get_name = spy.new(
+          function(_) return 'testFile.lua' end
+        )
+
+        -- Call sendDiagnostic with nil line number to get all diagnostics
+        ideSidebar.sendDiagnostic(1, nil) -- bufnr = 1, no line filter
+
+        -- Restore original function
+        ideSidebar.sendText = originalSendText
+        terminalMock.create = originalCreate
+
+        -- Check if sendText was called and captured the text
+        assert.spy(sendTextSpy).was.called(1)
+        assert.truthy(capturedText)
+        assert.truthy(string.find(capturedText or '', 'file:testFile.lua'))
+        assert.truthy(
+          string.find(
+            capturedText or '',
+            'L6:function test_line_content%(%) end %- {test%-source}%[ERROR%] Test error message'
+          )
+        )
+      end
+    )
 
     it('should handle empty diagnostics', function()
       -- Setup for a single command
       ideSidebar.setup({ cmd = 'gemini', port = 12345 })
 
       -- Mock empty diagnostics
-      vim.diagnostic.get = spy.new(function(bufnr) return {} end)
+      vim.diagnostic.get = spy.new(function(_) return {} end)
 
       -- Call sendDiagnostic with empty diagnostics
       ideSidebar.sendDiagnostic(1, 6)
@@ -406,11 +455,11 @@ describe('ideSidebar', function()
       terminalMock.getActiveTerminals = function() return activeTerminals end
 
       -- Mock creating a terminal
-      terminalMock.create = spy.new(function(cmd, config) return mockTerm end)
+      terminalMock.create = spy.new(function() return mockTerm end)
 
       -- Mock terminal creation for when sendText calls terminal create
       local originalCreate = terminalMock.create
-      terminalMock.create = spy.new(function(cmd, config)
+      terminalMock.create = spy.new(function()
         return {
           buf = 1,
           show = spy.new(function() end),
@@ -419,10 +468,10 @@ describe('ideSidebar', function()
       end)
 
       -- Mock channel related functions for sendText to work properly
-      vim.api.nvim_buf_get_var = spy.new(function(buf, varname)
+      vim.api.nvim_buf_get_var = spy.new(function()
         return 123 -- mock channel id
       end)
-      vim.api.nvim_chan_send = spy.new(function(channel, text) end)
+      vim.api.nvim_chan_send = spy.new(function() end)
 
       -- Mock visual selection range
       vim.fn.line = spy.new(function(range)
@@ -447,7 +496,7 @@ describe('ideSidebar', function()
 
       -- Mock buffer lines
       vim.api.nvim_buf_get_lines = spy.new(
-        function(buf, start, end_line, strict_indexing)
+        function()
           return { 'line 1', 'line 2 content', 'line 3 more content', 'line 4' }
         end
       )
@@ -470,7 +519,7 @@ describe('ideSidebar', function()
       assert.spy(sendTextSpy).was.called(1)
       assert.truthy(capturedText)
       -- The selected text should be included, plus the additional text
-      assert.truthy(string.find(capturedText, 'additional text'))
+      assert.truthy(string.find(capturedText or '', 'additional text'))
     end)
 
     it('should handle no visual selection', function()
@@ -500,7 +549,7 @@ describe('ideSidebar', function()
 
       -- Mock terminal creation for when sendText calls terminal create
       local originalCreate = terminalMock.create
-      terminalMock.create = spy.new(function(cmd, config)
+      terminalMock.create = spy.new(function()
         return {
           buf = 1,
           show = spy.new(function() end),
@@ -509,10 +558,10 @@ describe('ideSidebar', function()
       end)
 
       -- Mock channel related functions for sendText to work properly
-      vim.api.nvim_buf_get_var = spy.new(function(buf, varname)
+      vim.api.nvim_buf_get_var = spy.new(function()
         return 123 -- mock channel id
       end)
-      vim.api.nvim_chan_send = spy.new(function(channel, text) end)
+      vim.api.nvim_chan_send = spy.new(function() end)
 
       -- Mock sendText to capture what gets sent
       local capturedText = nil
@@ -531,7 +580,7 @@ describe('ideSidebar', function()
       -- Check that sendText was called with only the additional args
       assert.spy(sendTextSpy).was.called(1)
       assert.truthy(capturedText)
-      assert.truthy(string.find(capturedText, 'only args text'))
+      assert.truthy(string.find(capturedText or '', 'only args text'))
     end)
   end)
 
@@ -541,14 +590,6 @@ describe('ideSidebar', function()
       ideSidebar.setup({ cmd = 'gemini', port = 12345 })
 
       -- Create mock terminal
-      local cmd = 'gemini'
-      local env = {
-        GEMINI_CLI_IDE_WORKSPACE_PATH = '/test/dir',
-        GEMINI_CLI_IDE_SERVER_PORT = '12345',
-        TERM_PROGRAM = 'vscode',
-      }
-      local expectedId = ideSidebar.createDeterministicId(cmd, env)
-
       local mockTerm = {
         buf = 1,
         show = spy.new(function() end),
@@ -556,7 +597,7 @@ describe('ideSidebar', function()
       }
 
       -- Mock creating a terminal
-      terminalMock.create = spy.new(function(cmd, config) return mockTerm end)
+      terminalMock.create = spy.new(function() return mockTerm end)
 
       -- Mock buffer validation function to confirm buffer is valid
       local originalBufIsValid = vim.api.nvim_buf_is_valid
@@ -574,9 +615,7 @@ describe('ideSidebar', function()
       end
 
       local sentText = nil
-      vim.api.nvim_chan_send = spy.new(
-        function(channel, text) sentText = text end
-      )
+      vim.api.nvim_chan_send = spy.new(function(_, text) sentText = text end)
 
       -- Call sendText
       ideSidebar.sendText('Hello world')
@@ -588,7 +627,7 @@ describe('ideSidebar', function()
       assert.spy(vim.api.nvim_chan_send).was.called(1)
       assert.truthy(sentText)
       -- Should contain the bracketed paste markers: \27[200~text\27[201~\r
-      assert.truthy(string.find(sentText, 'Hello world'))
+      assert.truthy(string.find(sentText or '', 'Hello world'))
     end)
 
     it('should handle case when terminal buffer is invalid', function()
@@ -601,7 +640,7 @@ describe('ideSidebar', function()
         exit = spy.new(function() end),
         show = spy.new(function() end),
       }
-      terminalMock.create = spy.new(function(cmd, config) return mockTerm end)
+      terminalMock.create = spy.new(function() return mockTerm end)
 
       -- Mock to simulate invalid buffer
       vim.api.nvim_buf_is_valid = function(buf)

@@ -57,7 +57,7 @@ local presets = {
     col = 0.15, -- 15% from left of screen
     relative = 'editor', -- Relative to editor window
     border = 'rounded', -- Rounded border style
-    zindex = 1000, -- Z-index for layering
+    zindex = 25, -- Z-index for layering
     preset = 'floating',
   },
 }
@@ -83,7 +83,7 @@ local function hresize(size, maxSize)
   vim.cmd('resize ' .. size)
   -- Fix the window height to prevent other splits from resizing it
   -- This ensures horizontal splits maintain their height when other windows are resized
-  vim.api.nvim_win_set_option(0, 'winfixheight', true)
+  vim.wo[vim.api.nvim_get_current_win()]['winfixheight'] = true
 end
 
 -- Helper function to resize windows vertically
@@ -95,7 +95,7 @@ local function vresize(size, maxSize)
   vim.cmd('vertical resize ' .. size)
   -- Fix the window width to prevent other splits from resizing it
   -- This ensures vertical splits maintain their width when other windows are resized
-  vim.api.nvim_win_set_option(0, 'winfixwidth', true)
+  vim.wo[vim.api.nvim_get_current_win()]['winfixwidth'] = true
 end
 
 ----------------------------------------------------------------
@@ -331,14 +331,16 @@ end
 
 -- Helper method to apply window options from configuration
 function terminal:applyWindowOptions()
+  local width = self.config.extendedWin.width
   for k, v in pairs(self.config.extendedWin.wo) do
     pcall(function() vim.wo[self.win][k] = v end)
   end
 
   -- Set winbar to display "Agent: command" (max 20 chars), Left-aligned
+  width = width and relativeToAbsolute(width, vim.o.columns) or nil
   local cmdName = self.config.name or (self.cmd or vim.o.shell)
-  local truncatedTitle = string.len(cmdName) > 20
-      and string.sub(cmdName, 1, 17) .. '...'
+  local truncatedTitle = (string.len(cmdName) > (width or 20))
+      and string.sub(cmdName, 1, (width or 20)) .. '...'
     or cmdName
   vim.wo[self.win].winbar = truncatedTitle .. '%=' -- Left-aligned with %=
 end

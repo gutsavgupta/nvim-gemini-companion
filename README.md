@@ -4,146 +4,134 @@
 
 `nvim-gemini-companion` brings the power of AI agents like Gemini and Qwen directly into your Neovim workflow. 🌟 Enjoy seamless diff views, agent management, and smart file modifications without leaving your editor.
 
-![Gemini](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/main/assets/Gemini-20250928.png)
--------
-![Qwen](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/main/assets/Qwen-20250928.png)
--------
-
-## Demo
 https://github.com/user-attachments/assets/48324de2-1c7c-4a00-966a-23836aecd29e
 
-## Features
+## 🚀 Quick Start
 
-*   ✅**Diff Control:** Auto diff views, accept or reject suggestions directly from vim using `:wq` or `:q`.
-*   ✅ **CLI Agent:** Dedicated terminal session for interacting with AI agents
-*   ✅ **Multi-Agent Support:** Run both `gemini` and `qwen-code` agents simultaneously 
-*   ✅ **Tab-based Switching:** Effortlessly switch between AI terminals with `<Tab>`
-*   ✅ **Context Management:** Tracks open files, cursor position, and selections for AI context
-*   ✅ **LSP Diagnostics:** Send file/line diagnostics to AI agents for enhanced debugging
-*   ✅ **Send Selection:** Send selected text + prompt directly to AI agents using `:GeminiSend` command
-*   ✅ **Switchable Sidebar:** Choose between `right-fixed`, `left-fixed`, `bottom-fixed`, or `floating` styles
-*   ✅ **Highly Customizable:** Configure commands, window styles, and key bindings to your liking
+### Pre-requisites
+Install any or both CLI tools and ensure they're in your system's `PATH`:
 
-## Prerequisites
-
-Install the `gemini` and/or `qwen` CLIs and ensure they are in your system's `PATH`.
-
-*   [gemini-cli](https://github.com/google-gemini/gemini-cli) 
+*   [gemini-cli](https://github.com/google-gemini/gemini-cli)
 *   [qwen-code](https://github.com/QwenLM/qwen-code)
 
-## Installation
-
-You can install the plugin using `lazy.nvim`:
+### Installation
+Install with your favorite plugin manager:
 
 ```lua
 {
   "gutsavgupta/nvim-gemini-companion",
-  dependencies = {
-    "nvim-lua/plenary.nvim",
-  },
+  dependencies = { "nvim-lua/plenary.nvim" },
   event = "VeryLazy",
   config = function()
-    -- You can configure the plugin by passing a table to the setup function.
-    -- Example:
-    -- require("gemini").setup({
-    --   cmds = {"gemini"},
-    --   win = {
-    --     preset = "floating",
-    --     width = 0.8,
-    --     height = 0.8,
-    --   }
-    -- })
     require("gemini").setup()
   end,
   keys = {
-    { "<leader>gg", "<cmd>GeminiToggle<cr>", desc = "Toggle Gemini CLI"},
-    { "<leader>gc", "<cmd>GeminiClose<cr>", desc = "Close Gemini CLI process"},
-    { "<leader>gD", "<cmd>GeminiSendFileDiagnostic<cr>", desc = "Send File Diagnostics"},
-    { "<leader>gd", "<cmd>GeminiSendLineDiagnostic<cr>", desc = "Send Line Diagnostics"},
-    { "<leader>gs", "<cmd>GeminiSwitchSidebarStyle<cr>", desc = "Switch Sidebar Style"},
-    { "<leader>gS", "<cmd>GeminiSend<cr>", mode = "v", desc = "Send Selected Text to AI Agent"},
+    { "<leader>gg", "<cmd>GeminiToggle<cr>", desc = "Toggle Gemini sidebar" },
+    { "<leader>gc", "<cmd>GeminiSwitchToCli<cr>", desc = "Spawn or switch to AI session" },
+    { "<leader>gS", function() 
+        vim.cmd('normal! gv')
+        vim.cmd("'<,'>GeminiSend")
+      end, mode = { 'x' }, desc = 'Send selection to AI' },
   }
 }
 ```
 
-## Configuration
+## 🛠️ Essential Commands & Features
 
-The following options are available in the `setup` function:
+### Core Commands
+- `:GeminiToggle` - Toggle the AI sidebar
+- `:GeminiSwitchToCli` - Spawn or Switch to tmux/sidebar sessions
+- `:GeminiSend` - Send selected text to AI (use in visual mode)
+- `:GeminiSendLineDiagnostic` - Send line diagnostics to AI
+- `:GeminiSendFileDiagnostic` - Send file diagnostics to AI
 
-*   `cmds`: A list of commands to run for the CLI agents. Defaults to `{ "gemini", "qwen" }`.
-    *   The plugin checks if each agent is installed in the system `PATH` and only enables it if found.
-    *   If you want to use only one agent, you can set it as a single command string, e.g., `cmd = "gemini"`.
-*   `win`: This option configures the window for the sidebar. 
+### Diff Management
+When AI suggests changes, you can:
+- `:w` or `:wq` - Accept changes
+- `:q` or `:q!` - Reject changes
+- `:GeminiAccept` / `:GeminiReject` - Plugin-specific commands
 
-## Commands
+### Tmux Integration (Optional)
+Run AI agents in persistent tmux sessions:
+- `:GeminiSwitchToCli tmux gemini` - Use Gemini in tmux
+- `:GeminiSwitchToCli sidebar qwen` - Use Qwen in sidebar
 
-The plugin provides the following commands:
+## 🎛️ Customization Options
 
-*   `:GeminiToggle` - Toggle the Gemini sidebar
-*   `:GeminiClose` - Close the Gemini CLI process
-*   `:GeminiSendFileDiagnostic` - Send file diagnostics to AI agent
-*   `:GeminiSendLineDiagnostic` - Send line diagnostics to AI agent 
-*   `:GeminiSwitchSidebarStyle` - Switch between sidebar styles
-*   `:GeminiSend [text]` - Send (if selected) text to AI agent (in visual mode)
-*   `:GeminiAccept` - Accept changes in diff view
-*   `:GeminiReject` - Reject changes in diff view
-*   `:GeminiAnnouncement [arg]` - Show plugin announcements; if no argument is provided, shows the latest announcement; if an argument is provided, shows the specific announcement version (e.g., `:GeminiAnnouncement v0.5_release`)
-
-### Accepting and Rejecting Diffs
-
-When a diff view is presented, you have multiple ways to handle the suggested changes:
-
-*   **Vim-style Commands:**
-    *   `:w` or `:wq`: Write the buffer to accept the changes.
-    *   `:q` or `:q!`: Quit the buffer without writing to reject the changes.
-    This behavior is inspired by `vim.pack`.
-
-*   **Plugin Commands:**
-    *   `:GeminiAccept`: Accept the changes.
-    *   `:GeminiReject`: Reject the changes.
-
-These commands provide flexibility in how you manage the diffs, allowing you to use the method you find most comfortable.
-
-
-### Sidebar Presets
-
-The plugin includes several preset styles for the sidebar. You can set a preset using the `preset` key within the `win` option.
-
-Available presets:
-*   `right-fixed` (default)
-*   `left-fixed`
-*   `bottom-fixed`
-*   `floating`
-
-You can override any preset's options by specifying them in the `win` table. For example, to use the `floating` preset with a custom width and height:
+### Sidebar Styles
+Choose from multiple sidebar presets:
 ```lua
 require("gemini").setup({
   win = {
-    preset = "floating",
+    preset = "floating",  -- Options: "right-fixed", "left-fixed", "bottom-fixed", "floating"
     width = 0.8,
     height = 0.8,
   }
 })
 ```
 
-You can also cycle through presets on the fly using the `GeminiSwitchSidebarStyle` command to find the one that best suits your needs.
+### Multi-Agent Support
+Configure which agents to use:
+```lua
+require("gemini").setup({
+  cmds = { "gemini", "qwen" },  -- Use both
+  -- or
+  cmds = { "gemini" },  -- Use only Gemini
+})
+```
 
-## For Developers: Running Tests
+## ⚙️ Advanced Configuration
 
-To run the tests, execute the following command from the root of the repository:
+### Enhanced Picker Integration
+Replace default selection UI with fzf-lua/telescope:
+```lua
+-- For fzf-lua integration
+vim.ui.select = function(items, opts, onChoice)
+  require('fzf-lua').fzf_exec(items, {
+    prompt = opts.prompt or 'Select from items',
+    actions = {
+      ['default'] = function(selected) onChoice(selected[1]) end,
+    },
+    winopts = { height = math.min(0.2 + #items * 0.05, 0.6) },
+  })
+end
+```
 
+### Key Mappings for Quick Access
+```lua
+keys = {
+  { "<leader>g1", "<cmd>GeminiSwitchToCli tmux gemini<cr>", desc = "Tmux Gemini" },
+  { "<leader>g2", "<cmd>GeminiSwitchToCli tmux qwen<cr>", desc = "Tmux Qwen" },
+  { "<leader>gs", "<cmd>GeminiSwitchSidebarStyle<cr>", desc = "Switch sidebar style" },
+}
+```
+
+## 📸 Screenshots
+
+![Gemini](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/main/assets/Gemini-20250928.png)
+-------
+![Qwen](https://raw.githubusercontent.com/gutsavgupta/nvim-gemini-companion/main/assets/Qwen-20250928.png)
+
+## ✨ Key Features
+
+*   **Diff Control:** Auto diff views, accept or reject suggestions directly from vim using `:wq` or `:q`.
+*   **CLI Agent:** Dedicated terminal session for interacting with AI agents
+*   **Multi-Agent Support:** Run both `gemini` and `qwen-code` agents simultaneously 
+*   **Tmux Integration:** Persistent sessions with state across nvim restarts
+*   **Context Management:** Tracks open files, cursor position, and selections for AI context
+*   **LSP Diagnostics:** Send file/line diagnostics to AI agents for enhanced debugging
+*   **Visual Selection:** Send selected text + prompt directly to AI agents using `:GeminiSend`
+*   **Flexible Sidebar:** Choose between `right-fixed`, `left-fixed`, `bottom-fixed`, or `floating` styles
+*   **Highly Customizable:** Configure commands, window styles, and key bindings to your liking
+
+## 🔧 For Developers
+
+Run tests with:
 ```bash
 XDG_CONFIG_HOME=./tests nvim --headless -c "PlenaryBustedDirectory tests"
 ```
-This command will run all tests in the `tests` directory. To test a single file, use: `-c "PlenaryBustedFile tests/ideMcpServer_spec.lua"`
 
-The test setup includes automatic dependency management and will install `plenary.nvim` as needed.
-
-### Important Notes
-
-*   The test configuration now supports the `GEMINI_TEST_CMDS` environment variable to specify commands for testing (comma-separated), defaulting to `{'no-cli'}`.
-
-
-## Roadmap
-
-*   **ACP Protocol:** Implement ACP protocol support for deeper integration.
+## 🔄 Roadmap
+* **Amazon-cli** agent 
+* **More cli-agents** (similar to gemini-cli or forked versions)
+* **ACP Protocol:** Implement ACP protocol support for deeper integration.

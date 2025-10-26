@@ -1,0 +1,23 @@
+description = "Run and fix tests for the project."
+prompt = """
+Run tests for the project.
+
+1.  **Run tests for changed files:**
+    First, get the list of changed files from git diff.
+    For each changed file, find the corresponding `_spec.lua` test file.
+    Run the test for each of these spec files.
+    The command to run a single test file is:
+    `XDG_CONFIG_HOME=$(pwd)/tests nvim --headless -c "PlenaryBustedFile [path_to_spec_file]"`
+
+2.  **Run tests for the whole directory:**
+    Next, run all tests for the entire project.
+    The command to run all tests is:
+    `XDG_CONFIG_HOME=$(pwd)/tests nvim --headless -c "PlenaryBustedDirectory tests"`
+
+3.  **Fix failing tests:**
+    If any test fails, you must fix it.
+    Analyze the test failure, inspect the code, and apply a fix.
+    Verify your fix by running the test again.
+
+If the user provides a file path in `{{args}}`, start by running the test for that specific file.
+"""
