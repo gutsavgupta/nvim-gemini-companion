@@ -4,7 +4,7 @@
 
 `nvim-gemini-companion` brings the power of AI agents like Gemini and Qwen directly into your Neovim workflow. 🌟 Enjoy seamless diff views, agent management, and smart file modifications without leaving your editor.
 
-https://github.com/user-attachments/assets/48324de2-1c7c-4a00-966a-23836aecd29e
+https://github.com/user-attachments/assets/90370aa6-1ae2-477c-8529-0f26e32bdff8
 
 ## 🚀 Quick Start
 
