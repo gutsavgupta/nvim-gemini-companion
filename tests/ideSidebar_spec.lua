@@ -378,6 +378,15 @@ describe('ideSidebar', function()
         end)
         vim.api.nvim_chan_send = spy.new(function(_, _) end)
 
+        -- Mock nvim_buf_get_lines to return line content for diagnostics
+        vim.api.nvim_buf_get_lines = spy.new(function(bufnr, start, end_, _)
+          if start == 5 and end_ == 6 then -- lnum = 5 from mock, so get line 6 (0-indexed)
+            return { 'function test_line_content() end' } -- mock line content
+          else
+            return { '' } -- default empty line
+          end
+        end)
+
         -- Create a spy that captures the text parameter
         local capturedText = nil
         local sendTextSpy = spy.new(function(text) capturedText = text end)
@@ -403,7 +412,7 @@ describe('ideSidebar', function()
         assert.truthy(
           string.find(
             capturedText or '',
-            'L#:6 %- %[ERROR%] Test error message {test%-source}'
+            'L6:function test_line_content%(%) end %- {test%-source}%[ERROR%] Test error message'
           )
         )
       end

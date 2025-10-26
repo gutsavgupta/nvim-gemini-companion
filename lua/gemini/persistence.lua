@@ -39,7 +39,11 @@ function M.getServerDetailsPath()
   local cwdHash = vim.fn.sha256(cwd)
   -- Use only first 12 characters of the hash to keep filename manageable
   local shortHash = string.sub(cwdHash, 1, 12)
-  return string.format('/tmp/nvim-gemini-companion-%s.json', shortHash)
+  local cacheDir = vim.fn.stdpath('cache')
+  local geminiCacheDir = string.format('%s/nvim-gemini-companion', cacheDir)
+  -- Create the directory if it doesn't exist
+  vim.fn.mkdir(geminiCacheDir, 'p')
+  return string.format('%s/%s.json', geminiCacheDir, shortHash)
 end
 
 -- Reads and decodes the server details from a JSON file.
@@ -85,12 +89,16 @@ function M.writeServerDetails(port, workspace)
   file:close()
 end
 
--- Finds server details for the current workspace by searching for server details files in /tmp.
+-- Finds server details for the current workspace by searching for server details files in the cache directory.
 -- This is used to check if another instance of the plugin is already running for the same project.
 -- @return table|nil: A table with `details` and `isActive` boolean, or nil if no details are found.
 function M.getServerDetailsForSameWorkspace()
   local currentWorkspace = vim.fn.getcwd()
-  local files = vim.fn.glob('/tmp/nvim-gemini-companion-*.json', true, true)
+  local cacheDir = vim.fn.stdpath('cache')
+  local geminiCacheDir = string.format('%s/nvim-gemini-companion', cacheDir)
+  -- Create the directory if it doesn't exist
+  vim.fn.mkdir(geminiCacheDir, 'p')
+  local files = vim.fn.glob(geminiCacheDir .. '/*.json', true, true)
   for _, file in ipairs(files) do
     local details = M.readServerDetails(file)
     if details and details.workspace == currentWorkspace then

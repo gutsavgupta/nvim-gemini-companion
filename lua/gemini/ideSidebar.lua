@@ -163,8 +163,23 @@ function ideSidebar.sendDiagnostic(bufnr, linenumber)
       local message = diag.message
       local source = diag.source or ''
 
-      local formattedMessage =
-        string.format('L#:%d - [%s] %s {%s}', line, severity, message, source)
+      -- Get the line content from the buffer
+      local lineContent =
+        vim.api.nvim_buf_get_lines(bufnr, diag.lnum, diag.lnum + 1, false)
+      local content = lineContent[1] or ''
+      -- Truncate long lines for readability
+      if string.len(content) > 80 then
+        content = string.sub(content, 1, 80) .. '...'
+      end
+
+      local formattedMessage = string.format(
+        'L%d:%s - {%s}[%s] %s',
+        line,
+        content,
+        source,
+        severity,
+        message
+      )
       table.insert(formattedDiagnostics, formattedMessage)
     end
   end

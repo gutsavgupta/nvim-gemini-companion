@@ -5,13 +5,29 @@ describe('persistence module', function()
   local testFilePath = '/tmp/nvim-gemini-companion-test.json'
   local currentPid = vim.fn.getpid()
   local currentWorkspace = vim.fn.getcwd()
+  local originalStdpath = vim.fn.stdpath
+  local originalGlob = vim.fn.glob
+  local originalMkdir = vim.fn.mkdir
 
   before_each(function()
+    -- Override stdpath to return temp directory for cache
+    vim.fn.stdpath = function(path)
+      if path == 'cache' then
+        return '/tmp'
+      else
+        return originalStdpath(path)
+      end
+    end
+
     -- Clean up any existing test files
     if uv.fs_stat(testFilePath) then uv.fs_unlink(testFilePath) end
   end)
 
   after_each(function()
+    -- Restore original functions
+    vim.fn.stdpath = originalStdpath
+    vim.fn.glob = originalGlob
+    vim.fn.mkdir = originalMkdir
     -- Clean up test files after each test
     if uv.fs_stat(testFilePath) then uv.fs_unlink(testFilePath) end
   end)
@@ -23,7 +39,7 @@ describe('persistence module', function()
         local path = persistence.getServerDetailsPath()
         local cwd = vim.fn.getcwd()
         local cwdHash = vim.fn.sha256(cwd)
-        local expectedPattern = '/tmp/nvim%-gemini%-companion%-'
+        local expectedPattern = '/tmp/nvim%-gemini%-companion/'
           .. string.sub(cwdHash, 1, 12)
           .. '%.json'
 
@@ -42,7 +58,7 @@ describe('persistence module', function()
         local cwd = vim.fn.getcwd()
         local cwdHash = vim.fn.sha256(cwd)
         local expectedHash = string.sub(cwdHash, 1, 12)
-        local hashPattern = '/tmp/nvim%-gemini%-companion%-([a-f0-9]+)%.json'
+        local hashPattern = '/tmp/nvim%-gemini%-companion/([^/]+)%.json'
         local foundHash = string.match(path, hashPattern)
 
         assert.are.equal(foundHash, expectedHash)
@@ -175,10 +191,13 @@ describe('persistence module', function()
   describe('getServerDetailsForSameWorkspace', function()
     -- Helper function to create a server details file for a specific workspace
     local function createServerDetailsFile(workspace, port, pid, timestamp)
+      -- Use the same path generation logic as the production function (with mocked stdpath)
       local cwdHash = vim.fn.sha256(workspace)
       local shortHash = string.sub(cwdHash, 1, 12)
-      local filename =
-        string.format('/tmp/nvim-gemini-companion-%s.json', shortHash)
+      local cacheDir = vim.fn.stdpath('cache')
+      local geminiCacheDir = string.format('%s/nvim-gemini-companion', cacheDir)
+      vim.fn.mkdir(geminiCacheDir, 'p')
+      local filename = string.format('%s/%s.json', geminiCacheDir, shortHash)
       local data = {
         port = port,
         workspace = workspace,
@@ -193,7 +212,7 @@ describe('persistence module', function()
 
     before_each(function()
       -- Remove all existing nvim-gemini-companion files
-      local files = vim.fn.glob('/tmp/nvim-gemini-companion-*.json', true, true)
+      local files = vim.fn.glob('/tmp/nvim-gemini-companion/*.json', true, true) -- Fixed pattern
       for _, file in ipairs(files) do
         if uv.fs_stat(file) then uv.fs_unlink(file) end
       end
@@ -201,7 +220,7 @@ describe('persistence module', function()
 
     after_each(function()
       -- Clean up any test files created
-      local files = vim.fn.glob('/tmp/nvim-gemini-companion-*.json', true, true)
+      local files = vim.fn.glob('/tmp/nvim-gemini-companion/*.json', true, true) -- Fixed pattern
       for _, file in ipairs(files) do
         if uv.fs_stat(file) then uv.fs_unlink(file) end
       end
@@ -221,7 +240,6 @@ describe('persistence module', function()
           differentWorkspace = '/tmp/another-workspace'
         end
         createServerDetailsFile(differentWorkspace, 8080, currentPid + 1000)
-
         local result = persistence.getServerDetailsForSameWorkspace()
         assert.are.equal(result, nil)
       end
@@ -234,7 +252,6 @@ describe('persistence module', function()
         local fakePid = currentPid + 1000 -- Fake PID that doesn't exist
         local expectedPort = 8080
         createServerDetailsFile(currentWorkspace, expectedPort, fakePid)
-
         local result = persistence.getServerDetailsForSameWorkspace()
 
         assert.are.equal(type(result), 'table')
@@ -249,9 +266,7 @@ describe('persistence module', function()
     it('should return isActive=true when process is active', function()
       -- This is hard to test with a real active process, so we'll test the logic
       -- by creating a file with current PID (which should be active)
-      local filename =
-        createServerDetailsFile(currentWorkspace, 8080, currentPid)
-
+      createServerDetailsFile(currentWorkspace, 8080, currentPid)
       local result = persistence.getServerDetailsForSameWorkspace()
 
       assert.are.equal(type(result), 'table')
@@ -263,8 +278,7 @@ describe('persistence module', function()
     it('should return isActive=false when process is not active', function()
       -- Create a server details file with a fake PID (which should not be active)
       local fakePid = 1 -- System PID that's unlikely to exist or be nvim
-      local filename = createServerDetailsFile(currentWorkspace, 8080, fakePid)
-
+      createServerDetailsFile(currentWorkspace, 8080, fakePid)
       local result = persistence.getServerDetailsForSameWorkspace()
 
       assert.are.equal(type(result), 'table')
