@@ -35,16 +35,19 @@ describe('persistence module', function()
       end
     )
 
-    it('should return different paths for different working directories', function()
-      local path = persistence.getServerDetailsPath()
-      local cwd = vim.fn.getcwd()
-      local cwdHash = vim.fn.sha256(cwd)
-      local expectedHash = string.sub(cwdHash, 1, 12)
-      local hashPattern = '/tmp/nvim%-gemini%-companion%-([a-f0-9]+)%.json'
-      local foundHash = string.match(path, hashPattern)
+    it(
+      'should return different paths for different working directories',
+      function()
+        local path = persistence.getServerDetailsPath()
+        local cwd = vim.fn.getcwd()
+        local cwdHash = vim.fn.sha256(cwd)
+        local expectedHash = string.sub(cwdHash, 1, 12)
+        local hashPattern = '/tmp/nvim%-gemini%-companion%-([a-f0-9]+)%.json'
+        local foundHash = string.match(path, hashPattern)
 
-      assert.are.equal(foundHash, expectedHash)
-    end)
+        assert.are.equal(foundHash, expectedHash)
+      end
+    )
   end)
 
   describe('readServerDetails', function()
@@ -174,7 +177,8 @@ describe('persistence module', function()
     local function createServerDetailsFile(workspace, port, pid, timestamp)
       local cwdHash = vim.fn.sha256(workspace)
       local shortHash = string.sub(cwdHash, 1, 12)
-      local filename = string.format('/tmp/nvim-gemini-companion-%s.json', shortHash)
+      local filename =
+        string.format('/tmp/nvim-gemini-companion-%s.json', shortHash)
       local data = {
         port = port,
         workspace = workspace,
@@ -245,7 +249,8 @@ describe('persistence module', function()
     it('should return isActive=true when process is active', function()
       -- This is hard to test with a real active process, so we'll test the logic
       -- by creating a file with current PID (which should be active)
-      local filename = createServerDetailsFile(currentWorkspace, 8080, currentPid)
+      local filename =
+        createServerDetailsFile(currentWorkspace, 8080, currentPid)
 
       local result = persistence.getServerDetailsForSameWorkspace()
 

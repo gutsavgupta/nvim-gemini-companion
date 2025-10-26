@@ -664,26 +664,16 @@ function ideSidebar.setup(opts)
     {
       nargs = '*',
       desc = 'Switch to cli with <type> <cmd_idx|cmd> or select one',
-      complete = function(arglead, cmdline, _)
+      complete = function(_, cmdline, _)
         local parts = vim.split(cmdline, ' ', true)
         if #parts == 2 then
           return { 'sidebar', 'tmux' }
         elseif #parts == 3 then
           local completions = {}
           for i, opt in ipairs(ideSidebarState.terminalOpts) do
-            table.insert(completions, tostring(i))
-            table.insert(completions, opt.cmd)
+            table.insert(completions, tostring(i) .. ' ' .. opt.cmd)
           end
-          -- Filter unique values
-          local seen = {}
-          local unique_completions = {}
-          for _, value in ipairs(completions) do
-            if not seen[value] then
-              table.insert(unique_completions, value)
-              seen[value] = true
-            end
-          end
-          return unique_completions
+          return completions
         end
         return {}
       end,
