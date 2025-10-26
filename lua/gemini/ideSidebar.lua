@@ -339,63 +339,99 @@ function ideSidebar.sendTextToTmux(sessionName, text)
         )
         os.execute(string.format('tmux select-window -t "%s"', sessionName))
       else
-        -- TODO change this to notify (via vim schedule)
-        log.error('Failed to send text to tmux')
+        vim.schedule(
+          function()
+            vim.notify('Failed to send text to tmux', vim.log.levels.ERROR)
+          end
+        )
       end
     end
   )
 end
 
 --- Switch to a CLI in either tmux or sidebar
--- @param arg string The argument specifying the CLI to switch to
+-- @param arg string The argument specifying the CLI to switch to, in the format "<type> <cmd_idx>" (e.g., "tmux 1").
+-- If no arg is provided, a selection UI will be shown.
 -- @return nil
--- TODO: this function doesn't handle duplicate commands
--- i.e if someone configs {'qwen', 'qwen', 'gemini'} for 2 qwen and 1 gemini session
--- we need to come up with better arg scheming may be 'tmux <cmd_idx>'
 function ideSidebar.switchToCli(arg)
-  local cmds = {}
-  local cmdToIdx = {}
+  local cmdsForSelect = {}
   for idx, opt in ipairs(ideSidebarState.terminalOpts) do
-    table.insert(cmds, 'tmux ' .. opt.cmd)
-    table.insert(cmds, 'sidebar ' .. opt.cmd)
-    cmdToIdx[opt.cmd] = idx
+    -- The format for display in selection UI
+    table.insert(cmdsForSelect, string.format('sidebar %d %s', idx, opt.cmd))
+    table.insert(cmdsForSelect, string.format('tmux %d %s', idx, opt.cmd))
   end
+
   if not arg or arg == '' then
-    table.sort(cmds)
-    vim.ui.select(cmds, {
-      prompt = 'Select a command to spawn in tmux:',
+    table.sort(cmdsForSelect)
+    vim.ui.select(cmdsForSelect, {
+      prompt = 'Select a command to spawn:',
     }, function(choice)
       if not choice then return end
-      ideSidebar.switchToCli(choice)
+      -- The choice is in the format "type idx cmd". We need "type idx".
+      local parts = vim.split(choice, ' ', { trimempty = true })
+      ideSidebar.switchToCli(parts[1] .. ' ' .. parts[2])
     end)
     return
   end
+
   -------------------------------------------------------------
   --- arg have a valid value
   -------------------------------------------------------------
-  if not vim.tbl_contains(cmds, arg) then
+  local parts = vim.split(arg, ' ', { trimempty = true })
+  if #parts < 2 then
+    vim.notify(
+      'Invalid argument. Expected <type> <cmd_idx> or <type> <cmd>.',
+      vim.log.levels.ERROR
+    )
+    return
+  end
+
+  local windowType = parts[1]
+  local cmdIdentifier = parts[2]
+  local idx = tonumber(cmdIdentifier)
+
+  if not idx then
+    -- Best effort for backward compatibility: find first match for the command name
+    for i, opt in ipairs(ideSidebarState.terminalOpts) do
+      if opt.cmd == cmdIdentifier then
+        idx = i
+        break
+      end
+    end
+  end
+
+  if not idx or not ideSidebarState.terminalOpts[idx] then
+    local validCmds = {}
+    for i, opt in ipairs(ideSidebarState.terminalOpts) do
+      table.insert(
+        validCmds,
+        string.format("'%s %d' (%s)", 'sidebar', i, opt.cmd)
+      )
+      table.insert(validCmds, string.format("'%s %s'", 'sidebar', opt.cmd))
+      table.insert(validCmds, string.format("'%s %d' (%s)", 'tmux', i, opt.cmd))
+      table.insert(validCmds, string.format("'%s %s'", 'tmux', opt.cmd))
+    end
     vim.notify(
       string.format(
-        'Invalid command: "%s", should be one of the following: %s',
-        arg,
-        table.concat(cmds, ', ')
+        'Invalid command identifier: "%s". Should be a valid index or command name. Valid options are: %s',
+        cmdIdentifier,
+        table.concat(validCmds, ', ')
       ),
       vim.log.levels.ERROR
     )
     return
   end
 
-  local pos = string.find(arg, ' ')
-  local windowType = string.sub(arg, 1, pos - 1)
-  local cmd = string.sub(arg, pos + 1)
-  local idx = cmdToIdx[cmd]
   if windowType == 'tmux' then
     spawnTmuxWithConfig(idx)
   elseif windowType == 'sidebar' then
     spawnSidebarWithConfig(idx)
   else
     vim.notify(
-      string.format('Invalid window type: %s', windowType),
+      string.format(
+        'Invalid window type: %s. Should be "tmux" or "sidebar".',
+        windowType
+      ),
       vim.log.levels.ERROR
     )
   end
@@ -627,16 +663,27 @@ function ideSidebar.setup(opts)
     function(cmdOpts) ideSidebar.switchToCli(table.concat(cmdOpts.fargs, ' ')) end,
     {
       nargs = '*',
-      desc = 'Switch to cli with <type> <cmd> or select one',
-      complete = function(_, cmdLine, _)
-        local cmdline = vim.split(cmdLine, ' ')
-        if #cmdline == 2 then
-          -- Second argument - provide CLI types
+      desc = 'Switch to cli with <type> <cmd_idx|cmd> or select one',
+      complete = function(arglead, cmdline, _)
+        local parts = vim.split(cmdline, ' ', true)
+        if #parts == 2 then
           return { 'sidebar', 'tmux' }
-        end
-        if #cmdline == 3 then
-          -- First argument - provide commands
-          return { 'gemini', 'qwen' }
+        elseif #parts == 3 then
+          local completions = {}
+          for i, opt in ipairs(ideSidebarState.terminalOpts) do
+            table.insert(completions, tostring(i))
+            table.insert(completions, opt.cmd)
+          end
+          -- Filter unique values
+          local seen = {}
+          local unique_completions = {}
+          for _, value in ipairs(completions) do
+            if not seen[value] then
+              table.insert(unique_completions, value)
+              seen[value] = true
+            end
+          end
+          return unique_completions
         end
         return {}
       end,
