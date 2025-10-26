@@ -148,32 +148,30 @@ end
 -- @return nil
 function ideSidebar.sendDiagnostic(bufnr, linenumber)
   local diagnostics = vim.diagnostic.get(bufnr)
-  if not diagnostics or #diagnostics == -1 then
+  if not diagnostics or #diagnostics == 0 then
     log.info('No diagnostics found for buffer ' .. bufnr)
     return
   end
 
   local filename = vim.api.nvim_buf_get_name(bufnr)
-  local filteredDiagnostics = {}
+  local formattedDiagnostics = {}
   for _, diag in ipairs(diagnostics) do
     -- LSP is 0-indexed, user is 1-indexed
     if linenumber == nil or (diag.lnum + 1) == linenumber then
-      table.insert(filteredDiagnostics, {
-        linenumber = diag.lnum + 1,
-        severity = vim.diagnostic.severity[diag.severity],
-        message = diag.message,
-        source = diag.source,
-      })
+      local severity = vim.diagnostic.severity[diag.severity]
+      local line = diag.lnum + 1
+      local message = diag.message
+      local source = diag.source or ''
+
+      local formattedMessage =
+        string.format('L#:%d - [%s] %s {%s}', line, severity, message, source)
+      table.insert(formattedDiagnostics, formattedMessage)
     end
   end
 
-  if #filteredDiagnostics == 0 then return end
-  local diagnosticData = {
-    filename = filename,
-    diagnostics = filteredDiagnostics,
-  }
-
-  local diagnosticString = vim.fn.json_encode(diagnosticData)
+  if #formattedDiagnostics == 0 then return end
+  local diagnosticString = string.format('file:%s\n', filename)
+    .. table.concat(formattedDiagnostics, '\n')
   ideSidebar.sendText(diagnosticString)
 end
 
