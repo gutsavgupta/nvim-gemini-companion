@@ -211,8 +211,8 @@ describe('ideSidebar', function()
     end)
   end)
 
-  describe('switchTerms method', function()
-    it('should hide current terminal and show next one', function()
+  describe('switchSidebar method', function()
+    it('should switch to the next active terminal', function()
       -- Setup multiple commands to have multiple terminals to switch between
       ideSidebar.setup({ cmds = { 'gemini', 'qwen' }, port = 12345 })
 
@@ -228,8 +228,8 @@ describe('ideSidebar', function()
         TERM_PROGRAM = 'vscode',
       }
 
-      local geminiId = ideSidebar.createDeterministicId('gemini', geminiEnv)
-      local qwenId = ideSidebar.createDeterministicId('qwen', qwenEnv)
+      local geminiId = ideSidebar.createDeterministicId('gemini', geminiEnv, 1)
+      local qwenId = ideSidebar.createDeterministicId('qwen', qwenEnv, 2)
 
       local geminiTerm = {
         hide = spy.new(function() end),
@@ -247,22 +247,115 @@ describe('ideSidebar', function()
 
       terminalMock.getActiveTerminals = function() return activeTerminals end
 
-      -- Mock terminal.create to return the correct terminals
-      local originalCreate = terminalMock.create
-      terminalMock.create = spy.new(function(cmd, config)
-        if cmd == 'gemini' then
-          return geminiTerm
-        else
-          return qwenTerm
-        end
-      end)
+      -- Spy on switchToCli to verify it's called with the correct parameters
+      local switchToCliSpy = spy.new(function() end)
+      local originalSwitchToCli = ideSidebar.switchToCli
+      ideSidebar.switchToCli = switchToCliSpy
 
-      -- Call switchTerms
-      ideSidebar.switchTerms()
+      -- Call switchSidebar (with default 'next' direction)
+      ideSidebar.switchSidebar()
 
-      -- Check that hide was called on the first terminal and show on the second
-      assert.spy(geminiTerm.hide).was.called(1)
-      assert.spy(qwenTerm.show).was.called(1)
+      -- Check that switchToCli was called with the correct parameters
+      assert.spy(switchToCliSpy).was.called(1)
+      local args = switchToCliSpy.calls[1]
+      assert.truthy(string.find(args.vals[1] or '', 'sidebar'))
+
+      -- Restore original function
+      ideSidebar.switchToCli = originalSwitchToCli
+    end)
+
+    it(
+      'should switch to the previous active terminal when direction is prev',
+      function()
+        -- Setup multiple commands to have multiple terminals to switch between
+        ideSidebar.setup({ cmds = { 'gemini', 'qwen' }, port = 12345 })
+
+        -- Create mock terminals
+        local geminiEnv = {
+          GEMINI_CLI_IDE_WORKSPACE_PATH = '/test/dir',
+          GEMINI_CLI_IDE_SERVER_PORT = '12345',
+          TERM_PROGRAM = 'vscode',
+        }
+        local qwenEnv = {
+          QWEN_CODE_IDE_WORKSPACE_PATH = '/test/dir',
+          QWEN_CODE_IDE_SERVER_PORT = '12345',
+          TERM_PROGRAM = 'vscode',
+        }
+
+        local geminiId =
+          ideSidebar.createDeterministicId('gemini', geminiEnv, 1)
+        local qwenId = ideSidebar.createDeterministicId('qwen', qwenEnv, 2)
+
+        local geminiTerm = {
+          hide = spy.new(function() end),
+          show = spy.new(function() end),
+        }
+
+        local qwenTerm = {
+          hide = spy.new(function() end),
+          show = spy.new(function() end),
+        }
+
+        local activeTerminals = {}
+        activeTerminals[geminiId] = geminiTerm
+        activeTerminals[qwenId] = qwenTerm
+
+        terminalMock.getActiveTerminals = function() return activeTerminals end
+
+        -- Spy on switchToCli to verify it's called with the correct parameters
+        local switchToCliSpy = spy.new(function() end)
+        local originalSwitchToCli = ideSidebar.switchToCli
+        ideSidebar.switchToCli = switchToCliSpy
+
+        -- Call switchSidebar with 'prev' direction
+        ideSidebar.switchSidebar('prev')
+
+        -- Check that switchToCli was called with the correct parameters
+        assert.spy(switchToCliSpy).was.called(1)
+        local args = switchToCliSpy.calls[1]
+        assert.truthy(string.find(args.vals[1] or '', 'sidebar'))
+
+        -- Restore original function
+        ideSidebar.switchToCli = originalSwitchToCli
+      end
+    )
+
+    it('should not switch if there are less than 2 active terminals', function()
+      -- Setup multiple commands to have multiple terminals but only one active
+      ideSidebar.setup({ cmds = { 'gemini', 'qwen' }, port = 12345 })
+
+      -- Create mock terminal for only one command
+      local geminiEnv = {
+        GEMINI_CLI_IDE_WORKSPACE_PATH = '/test/dir',
+        GEMINI_CLI_IDE_SERVER_PORT = '12345',
+        TERM_PROGRAM = 'vscode',
+      }
+
+      local geminiId = ideSidebar.createDeterministicId('gemini', geminiEnv)
+
+      local geminiTerm = {
+        hide = spy.new(function() end),
+        show = spy.new(function() end),
+      }
+
+      local activeTerminals = {}
+      activeTerminals[geminiId] = geminiTerm
+
+      terminalMock.getActiveTerminals = function() return activeTerminals end
+
+      -- Spy on switchToCli to verify it's not called when less than 2 terminals are active
+      local switchToCliSpy = spy.new(function() end)
+      local originalSwitchToCli = ideSidebar.switchToCli
+      ideSidebar.switchToCli = switchToCliSpy
+
+      -- Call switchSidebar
+      ideSidebar.switchSidebar()
+
+      -- Check that switchToCli was not called because only one terminal is active
+      assert.spy(switchToCliSpy).was_not_called()
+
+      -- Restore original function
+      ideSidebar.switchToCli = originalSwitchToCli
     end)
   end)
 
