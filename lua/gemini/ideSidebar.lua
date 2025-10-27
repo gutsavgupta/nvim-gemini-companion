@@ -450,19 +450,34 @@ function ideSidebar.switchToCli(arg)
   end
 end
 
---- Switch to next sidebar terminal in command list
--- Hide current terminal and open next one in list
--- Used when multiple commands configured and Tab pressed in terminal mode
+--- Switch between active sidebar terminals
+-- Switch to the next or previous active terminal in the list
+-- Used when multiple commands are configured and key mappings are triggered
+-- @param direction string Optional, 'next' or 'prev', defaults to 'next'
 -- @return nil
-function ideSidebar.switchTerms()
-  local opts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
-  terminal.create(opts.cmd, opts):hide()
-  ideSidebarState.lastActiveIdx = (
-    ideSidebarState.lastActiveIdx % #ideSidebarState.terminalOpts
-  ) + 1
+function ideSidebar.switchSidebar(direction)
+  local activeSidebarTermIds = {}
+  local currentActiveIndex = -1
+  for idx, opts in ipairs(ideSidebarState.terminalOpts) do
+    local term = terminal.getActiveTerminals()[opts.id]
+    if term then
+      local activeInfo = { id = opts.id, idx = idx }
+      table.insert(activeSidebarTermIds, activeInfo)
+      -- Track the position of the currently active terminal in the active list
+      if idx == ideSidebarState.lastActiveIdx then
+        currentActiveIndex = #activeSidebarTermIds
+      end
+    end
+  end
 
-  local nextOpts = ideSidebarState.terminalOpts[ideSidebarState.lastActiveIdx]
-  terminal.create(nextOpts.cmd, nextOpts):show()
+  -- If there are less than 2 active sidebar terminals, do nothing
+  if #activeSidebarTermIds < 2 then return end
+  direction = direction or 'next'
+  local directionInt = (direction:lower() == 'prev' and -1 or 1)
+  local switchIndex = (
+    (currentActiveIndex - 1 + directionInt) % #activeSidebarTermIds
+  ) + 1
+  ideSidebar.switchToCli('sidebar ' .. activeSidebarTermIds[switchIndex].idx)
 end
 
 --- Toggle the sidebar terminal
@@ -615,7 +630,6 @@ function ideSidebar.setup(opts)
   for idx, cmd in ipairs(opts.cmds) do
     local termOpts =
       vim.tbl_deep_extend('force', vim.deepcopy(opts), { cmd = cmd })
-    local onBuffer = termOpts.on_buf
     local name = string.format('%s-ngc-%d(%s)', cwdBase, idx, cmd)
 
     termOpts.name = name
@@ -640,14 +654,25 @@ function ideSidebar.setup(opts)
       ideSidebar.createDeterministicId(termOpts.cmd, termOpts.env, idx)
 
     if #opts.cmds > 1 then
+      -- Add default keymaps for switching between active sidebar terminals
+      -- Users can define their own on_buf function to override these keymaps
+      local onBuffer = termOpts.on_buf
       termOpts.on_buf = function(buf)
         vim.api.nvim_buf_set_keymap(
           buf,
           't',
-          '<Tab>',
-          '<Cmd>lua require("gemini.ideSidebar").switchTerms()<CR>', -- Corrected escaping for nested quotes
+          '<M-]>',
+          '<Cmd>lua require("gemini.ideSidebar").switchSidebar()<CR>',
           { noremap = true, silent = true }
         )
+        vim.api.nvim_buf_set_keymap(
+          buf,
+          't',
+          '<M-[>',
+          '<Cmd>lua require("gemini.ideSidebar").switchSidebar("prev")<CR>',
+          { noremap = true, silent = true }
+        )
+        -- Call user's custom on_buf function if provided
         if type(onBuffer) == 'function' then onBuffer(buf) end
       end
     end

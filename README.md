@@ -44,6 +44,35 @@ Install with your favorite plugin manager:
 - `:GeminiSend` - Send selected text to AI (use in visual mode)
 - `:GeminiSendLineDiagnostic` - Send line diagnostics to AI
 - `:GeminiSendFileDiagnostic` - Send file diagnostics to AI
+- `:GeminiSwitchSidebarStyle` - Switch the appearance/style of the sidebar
+
+### Sidebar Terminal Switching
+When multiple commands are configured (e.g., both `gemini` and `qwen`), you can switch between active sidebar terminals using default key mappings:
+
+- `<M-]>` - Switch to the next active terminal (Alt + ])
+- `<M-[>` - Switch to the previous active terminal (Alt + [)
+
+To customize these key bindings, you can override the default mappings in your setup function:
+
+```lua
+require("gemini").setup({
+  cmds = { "gemini", "qwen" },
+  -- Override default key mappings
+  on_buf = function(buf)
+    -- Add your own custom mappings
+    vim.api.nvim_buf_set_keymap(buf, 't', '<Tab>', 
+      '<Cmd>lua require("gemini.ideSidebar").switchSidebar()<CR>', 
+      { noremap = true, silent = true }
+    )
+    vim.api.nvim_buf_set_keymap(buf, 't', '<S-Tab>', 
+      '<Cmd>lua require("gemini.ideSidebar").switchSidebar("prev")<CR>', 
+      { noremap = true, silent = true }
+    )
+  end
+})
+```
+
+**Note:** Be aware that `<Tab>` and `<S-Tab>` may already be mapped to other functionality by the Gemini/Qwen CLIs themselves, so using these keys for terminal switching might interfere with their built-in features. Consider using alternative key bindings such as `<C-Tab>` and `<C-S-Tab>` or the default Alt-based mappings instead.
 
 ### Diff Management
 When AI suggests changes, you can:
