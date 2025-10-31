@@ -2,7 +2,9 @@
 
 🚀 Now with Dual Agent Support (Gemini & Qwen)! 🤖
 
-`nvim-gemini-companion` brings the power of AI agents like Gemini and Qwen directly into your Neovim workflow. 🌟 Enjoy seamless diff views, agent management, and smart file modifications without leaving your editor.
+`nvim-gemini-companion` brings the power of AI agents like Gemini and Qwen directly into your Neovim workflow. 🌟 Enjoy seamless diff views, agent management, and smart file modifications without leaving your editor. **Inspired by the vscode-gemini-companion extension**
+
+Unlike other Gemini plugins for Neovim, nvim-gemini-companion is built around the MCP backend, which keeps your editor session tightly integrated with your IDE for much better experience ✨
 
 https://github.com/user-attachments/assets/90370aa6-1ae2-477c-8529-0f26e32bdff8
 
