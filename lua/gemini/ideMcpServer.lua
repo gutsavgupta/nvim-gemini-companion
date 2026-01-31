@@ -79,7 +79,7 @@ function IdeMcpServer:start(port)
         berr
       )
     )
-    self.server.bind('127.0.0.1', 0)
+    self.server:bind('127.0.0.1', 0)
   end
   self.server:listen(64, function(err)
     if err then
@@ -101,8 +101,9 @@ function IdeMcpServer:start(port)
   end)
 
   local sockname = self.server:getsockname()
-  log.info('ideMcpServer: listening on port', tostring(sockname.port))
-  return sockname.port
+  local port = sockname and sockname.port or 0
+  log.info('ideMcpServer: listening on port', tostring(port))
+  return port
 end
 
 --- Broadcasts a message to all connected streaming clients.
