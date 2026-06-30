@@ -16,6 +16,7 @@ local ideDiffManager
 local ideSidebar
 local announcement
 local persistence
+local claude
 
 -- Lazily loads the plugin's modules.
 -- This is done to improve Neovim's startup time by only
@@ -28,6 +29,32 @@ local function load_modules()
   ideSidebar = require('gemini.ideSidebar')
   announcement = require('gemini.announce')
   persistence = require('gemini.persistence')
+  claude = require('gemini.claude')
+end
+
+-- Resolves the effective list of CLI commands. An explicit user config always
+-- wins; otherwise the default is auto-detected from whichever agents are
+-- installed (see requirement.md §4.1a).
+-- @param opts table The setup options.
+-- @return table A list of command names.
+local function resolveCmds(opts)
+  if opts.cmd then return { opts.cmd } end
+  if opts.cmds and #opts.cmds > 0 then return opts.cmds end
+  local detected = {}
+  for _, c in ipairs({ 'gemini', 'qwen', 'claude' }) do
+    if vim.fn.executable(c) == 1 then table.insert(detected, c) end
+  end
+  return detected
+end
+
+-- @param list table A list of strings.
+-- @param value string The value to search for.
+-- @return boolean True if value is in list.
+local function listContains(list, value)
+  for _, v in ipairs(list) do
+    if v == value then return true end
+  end
+  return false
 end
 
 local server = nil
@@ -248,19 +275,44 @@ function M.setup(opts)
     )
     return
   end
-  -- 1. Start MCP server
+  -- Resolve the effective CLI list (auto-detect installed agents unless the
+  -- user configured cmds/cmd explicitly).
+  local effectiveCmds = resolveCmds(opts)
+  opts.cmds = effectiveCmds
+
+  -- 1. Start MCP server (HTTP/SSE, used by Gemini/Qwen)
   server = ideMcpServer.new({
     onClientRequest = handleMcpRequest,
   })
 
   local port = server:start(existingServer and existingServer.details.port or 0) -- Listen on a random port
-  persistence.writeServerDetails(port, vim.fn.getcwd())
   log.info('MCP Server started on port: ' .. port)
   opts.port = port
+
+  -- 1b. Start Claude integration (WebSocket) only if `claude` is both installed
+  -- and present in the effective cmds (requirement.md §4.1a). Reuse the persisted
+  -- port + auth token for this workspace so a detached `claude` can reconnect.
+  local claudeInfo
+  if vim.fn.executable('claude') == 1 and listContains(effectiveCmds, 'claude') then
+    claudeInfo = claude.start({
+      port = existingServer and existingServer.details.claudePort or nil,
+      authToken = existingServer and existingServer.details.claudeAuthToken or nil,
+    })
+  end
+  opts.claudePort = claudeInfo and claudeInfo.port or nil
+
+  persistence.writeServerDetails(
+    port,
+    vim.fn.getcwd(),
+    claudeInfo and claudeInfo.port or nil,
+    claudeInfo and claudeInfo.authToken or nil
+  )
+
   vim.api.nvim_create_autocmd('VimLeave', {
     pattern = '*',
     callback = function()
       if server then server:close() end
+      pcall(function() claude.stop() end)
     end,
   })
 
@@ -271,6 +323,8 @@ function M.setup(opts)
     M.debounce_timer = vim.fn.timer_start(100, function()
       local context = ideCntxManager.getContext()
       sendMcpNotification('ide/contextUpdate', context)
+      -- Mirror the change to Claude clients as a selection_changed notification.
+      if claude and claude.isActive() then claude.notifySelectionChanged() end
     end)
   end)
 
@@ -338,6 +392,12 @@ function M.getServerStatus()
   if server and server.server then
     local sockname = server.server:getsockname()
     if sockname then status.port = sockname.port end
+  end
+
+  -- Surface Claude integration status for the health check.
+  if claude then
+    local ok, claudeStatus = pcall(claude.getStatus)
+    if ok then status.claude = claudeStatus end
   end
 
   return status

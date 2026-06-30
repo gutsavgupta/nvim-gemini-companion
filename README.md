@@ -1,8 +1,8 @@
 # nvim-gemini-companion
 
-🚀 Now with Dual Agent Support (Gemini & Qwen)! 🤖
+🚀 Now with Triple Agent Support (Gemini, Qwen & Claude Code)! 🤖
 
-`nvim-gemini-companion` brings the power of AI agents like Gemini and Qwen directly into your Neovim workflow. 🌟 Enjoy seamless diff views, agent management, and smart file modifications without leaving your editor. **Inspired by the vscode-gemini-companion extension**
+`nvim-gemini-companion` brings the power of AI agents like Gemini, Qwen and Claude Code directly into your Neovim workflow. 🌟 Enjoy seamless diff views, agent management, and smart file modifications without leaving your editor. **Inspired by the vscode-gemini-companion extension**
 
 Unlike other Gemini plugins for Neovim, nvim-gemini-companion is built around the MCP backend, which keeps your editor session tightly integrated with your IDE for much better experience ✨
 
@@ -11,10 +11,13 @@ https://github.com/user-attachments/assets/90370aa6-1ae2-477c-8529-0f26e32bdff8
 ## 🚀 Quick Start
 
 ### Pre-requisites
-Install any or both CLI tools and ensure they're in your system's `PATH`:
+Install any (or all) of these CLI tools and ensure they're in your system's `PATH`:
 
 *   [gemini-cli](https://github.com/google-gemini/gemini-cli)
 *   [qwen-code](https://github.com/QwenLM/qwen-code)
+*   [claude-code](https://github.com/anthropics/claude-code)
+
+The plugin auto-detects which of these are installed, so no extra configuration is needed to get started.
 
 ### Installation
 Install with your favorite plugin manager:
@@ -100,14 +103,16 @@ require("gemini").setup({
 ```
 
 ### Multi-Agent Support
-Configure which agents to use:
+By default the plugin **auto-detects** which agents are installed (`gemini`, `qwen`, `claude`) and enables all of them — so most users don't need to set `cmds` at all. An explicit `cmds`/`cmd` always takes precedence over auto-detection:
+
 ```lua
-require("gemini").setup({
-  cmds = { "gemini", "qwen" },  -- Use both
-  -- or
-  cmds = { "gemini" },  -- Use only Gemini
-})
+require("gemini").setup()                          -- auto-detect installed agents (recommended)
+
+require("gemini").setup({ cmds = { "claude" } })   -- use only Claude Code
+require("gemini").setup({ cmds = { "gemini", "qwen", "claude" } }) -- pin all three
 ```
+
+> **Claude Code:** the Claude integration uses a WebSocket MCP server with lock-file discovery (under `~/.claude/ide/`) and a per-session auth token. It starts automatically only when `claude` is both installed **and** part of the effective `cmds`. Launch `claude` from the sidebar/tmux and it connects on its own — diffs, selection, open editors, and diagnostics all work out of the box.
 
 ## ⚙️ Advanced Configuration
 
@@ -145,7 +150,8 @@ keys = {
 
 *   **Diff Control:** Auto diff views, accept or reject suggestions directly from vim using `:wq` or `:q`.
 *   **CLI Agent:** Dedicated terminal session for interacting with AI agents
-*   **Multi-Agent Support:** Run both `gemini` and `qwen-code` agents simultaneously 
+*   **Multi-Agent Support:** Run `gemini`, `qwen-code`, and `claude-code` agents simultaneously
+*   **Claude Code Integration:** WebSocket MCP transport with lock-file discovery + auth; auto-connects, native diffs, live context
 *   **Tmux Integration:** Persistent sessions with state across nvim restarts
 *   **Context Management:** Tracks open files, cursor position, and selections for AI context
 *   **LSP Diagnostics:** Send file/line diagnostics to AI agents for enhanced debugging

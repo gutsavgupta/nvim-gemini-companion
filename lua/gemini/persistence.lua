@@ -68,15 +68,22 @@ end
 
 -- Writes the server details to a JSON file.
 -- This file is used to communicate the server's port, workspace, and PID to other processes.
--- @param port number: The port number the server is listening on.
+-- @param port number: The port number the HTTP/SSE (Gemini/Qwen) server is listening on.
 -- @param workspace string: The absolute path of the current workspace.
-function M.writeServerDetails(port, workspace)
+-- @param claudePort number|nil: The port of the Claude WebSocket server, if running.
+--   Persisting it lets the next Neovim for this workspace rebind the same port so a
+--   detached `claude` (e.g. in tmux) can reconnect.
+-- @param claudeAuthToken string|nil: The Claude lock-file auth token, reused on the
+--   next start so an already-connected `claude` re-authenticates after a restart.
+function M.writeServerDetails(port, workspace, claudePort, claudeAuthToken)
   local path = M.getServerDetailsPath()
   local data = {
     port = port,
     workspace = workspace,
     pid = vim.fn.getpid(),
     timestamp = os.time(),
+    claudePort = claudePort,
+    claudeAuthToken = claudeAuthToken,
   }
 
   local file = io.open(path, 'w')
