@@ -28,7 +28,10 @@ local views = {}
 --     the following:
 --       - `"accepted"`: The user accepted the changes.
 --       - `"rejected"`: The user rejected the changes.
-function manager.open(filePath, newContent, onClose)
+-- @param meta table|nil Optional metadata stored on the view. Recognized keys:
+--   - `clientId`: identifies the MCP client that opened the diff, so it can be
+--     force-rejected when that client disconnects (used by Claude integration).
+function manager.open(filePath, newContent, onClose, meta)
   vim.schedule(function()
     -- 1. Get filename and create the modified buffer name
     local filename = vim.fn.fnamemodify(filePath, ':t')
@@ -92,6 +95,7 @@ function manager.open(filePath, newContent, onClose)
       newBuf = newBuf,
       onClose = onClose,
       diffAccepted = false,
+      clientId = meta and meta.clientId or nil,
     }
 
     -- Set up autocommands for the new buffer to handle :w and quit events
@@ -242,6 +246,49 @@ function manager.getFilePathFromWindowID(winId)
 end
 
 function manager.getView(filePath) return views[filePath] end
+
+---
+-- Rejects and closes every still-open diff view opened by a given MCP client.
+-- Used by the Claude integration to avoid hanging a `claude` session whose
+-- blocking `openDiff` response would otherwise never be sent after disconnect.
+--
+-- @param clientId any The client identifier stored on the view via `open`'s meta.
+-- @param reason string|nil Unused, accepted for call-site clarity/logging.
+-- @return number count The number of diffs that were rejected.
+function manager.closeDiffsForClient(clientId, reason)
+  local _ = reason
+  local count = 0
+  -- Collect first; reject() mutates `views`.
+  local toReject = {}
+  for filePath, view in pairs(views) do
+    if view.clientId == clientId then table.insert(toReject, filePath) end
+  end
+  for _, filePath in ipairs(toReject) do
+    count = count + 1
+    manager.reject(filePath)
+  end
+  return count
+end
+
+---
+-- Closes every open diff view (used by the `closeAllDiffTabs` Claude tool).
+-- Open-but-unresolved diffs are rejected so their callbacks still fire.
+--
+-- @param reason string|nil Unused, accepted for call-site clarity/logging.
+-- @return number count The number of diffs that were closed.
+function manager.closeAll(reason)
+  local _ = reason
+  local count = 0
+  local paths = {}
+  for filePath in pairs(views) do
+    table.insert(paths, filePath)
+  end
+  for _, filePath in ipairs(paths) do
+    count = count + 1
+    manager.reject(filePath)
+  end
+  return count
+end
 
 ---
 -- Sets up the user commands for interacting with the diff view.

@@ -132,6 +132,56 @@ function manager.getContext()
 end
 
 ---
+-- Builds the `selection_changed`-shaped payload expected by Claude Code.
+-- Positions are LSP-style 0-indexed (line, character). Returns the active
+-- buffer's selection (or cursor position with isEmpty=true), or nil if there is
+-- no named active editor.
+-- @return table|nil A table { text, filePath, fileUrl, selection = { start, end, isEmpty } }.
+function manager.getClaudeSelection()
+  local currentBuf = vim.api.nvim_get_current_buf()
+  local bufName = vim.api.nvim_buf_get_name(currentBuf)
+  if not bufName or bufName == '' then return nil end
+
+  local startPos = vim.fn.getpos("'<")
+  local endPos = vim.fn.getpos("'>")
+  local hasSelection = startPos[2] ~= 0
+    and endPos[2] ~= 0
+    and not (startPos[2] == endPos[2] and startPos[3] == endPos[3])
+
+  if hasSelection then
+    local sLine, sCol = startPos[2], startPos[3]
+    local eLine, eCol = endPos[2], endPos[3]
+    local lines = vim.api.nvim_buf_get_lines(currentBuf, sLine - 1, eLine, false)
+    local text = table.concat(lines, '\n')
+    return {
+      text = text,
+      filePath = bufName,
+      fileUrl = 'file://' .. bufName,
+      selection = {
+        start = { line = sLine - 1, character = sCol - 1 },
+        ['end'] = { line = eLine - 1, character = eCol - 1 },
+        isEmpty = (#text == 0),
+      },
+    }
+  end
+
+  -- No visual selection: report the cursor position as an empty selection.
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local line0 = cursor[1] - 1
+  local char0 = cursor[2]
+  return {
+    text = '',
+    filePath = bufName,
+    fileUrl = 'file://' .. bufName,
+    selection = {
+      start = { line = line0, character = char0 },
+      ['end'] = { line = line0, character = char0 },
+      isEmpty = true,
+    },
+  }
+end
+
+---
 -- Sets up autocommands to track workspace events and keep the context updated.
 -- This should be called once during plugin initialization. It tracks buffer
 -- changes, cursor movements, and file deletions to trigger the onChangeCallback.

@@ -607,9 +607,18 @@ function ideSidebar.setup(opts)
   -------------------------------------------------------
   --- Setup Defaults
   -------------------------------------------------------
+  -- Default cmds are auto-detected from installed agents; an explicit user
+  -- cmds/cmd always wins (see requirement.md §4.1a). The plugin entry point
+  -- normally resolves this already, but detect here too for standalone callers.
+  local detectedCmds = {}
+  for _, c in ipairs({ 'gemini', 'qwen', 'claude' }) do
+    if vim.fn.executable(c) == 1 then table.insert(detectedCmds, c) end
+  end
+
   local defaults = {
-    cmds = { 'gemini', 'qwen' },
+    cmds = detectedCmds,
     port = nil,
+    claudePort = nil,
     env = {},
     win = {
       preset = 'right-fixed',
@@ -627,17 +636,39 @@ function ideSidebar.setup(opts)
   -------------------------------------------------------
   --- Creating Opts for Each Terminal
   -------------------------------------------------------
+  -- Resolve cmds explicitly to avoid tbl_deep_extend's index-wise array merge
+  -- (which would leak default entries when the user list is shorter).
+  local userCmds = opts.cmds
+  local userCmd = opts.cmd
   opts = vim.tbl_deep_extend('force', defaults, opts)
+  if userCmd then
+    opts.cmds = { userCmd }
+  elseif userCmds and #userCmds > 0 then
+    opts.cmds = userCmds
+  else
+    opts.cmds = defaults.cmds
+  end
   ideSidebarState.port = opts.port
-  if opts.cmd then opts.cmds = { opts.cmd } end
   for idx, cmd in ipairs(opts.cmds) do
     local termOpts =
       vim.tbl_deep_extend('force', vim.deepcopy(opts), { cmd = cmd })
     local name = string.format('%s-ngc-%d(%s)', cwdBase, idx, cmd)
 
     termOpts.name = name
-    termOpts.env.TERM_PROGRAM = 'vscode'
-    if string.find(termOpts.cmd, 'qwen') then
+    if string.find(termOpts.cmd, 'claude') then
+      if vim.fn.executable('claude') == 0 then
+        termOpts = nil
+        goto continue
+      end
+      -- Claude discovers Neovim via the lock file + these env vars. Do NOT set
+      -- TERM_PROGRAM=vscode here (that is a Gemini/Qwen signal).
+      termOpts.env.ENABLE_IDE_INTEGRATION = 'true'
+      termOpts.env.FORCE_CODE_TERMINAL = 'true'
+      if termOpts.claudePort then
+        termOpts.env.CLAUDE_CODE_SSE_PORT = tostring(termOpts.claudePort)
+      end
+    elseif string.find(termOpts.cmd, 'qwen') then
+      termOpts.env.TERM_PROGRAM = 'vscode'
       if termOpts.cmd == 'qwen' and vim.fn.executable('qwen') == 0 then
         termOpts = nil
         goto continue
@@ -645,6 +676,7 @@ function ideSidebar.setup(opts)
       termOpts.env.QWEN_CODE_IDE_WORKSPACE_PATH = vim.fn.getcwd()
       termOpts.env.QWEN_CODE_IDE_SERVER_PORT = tostring(termOpts.port)
     else
+      termOpts.env.TERM_PROGRAM = 'vscode'
       if termOpts.cmd == 'gemini' and vim.fn.executable('gemini') == 0 then
         termOpts = nil
         goto continue

@@ -56,6 +56,50 @@ M.checkServerDetails = function()
   end
 end
 
+-- Reports the status of the Claude Code WebSocket integration.
+M.claudeServerStatus = function()
+  local has_gemini, gemini = pcall(require, 'gemini')
+  if not has_gemini or not gemini or not gemini.getServerStatus then return end
+  local serverStatus = gemini.getServerStatus()
+  local claude = serverStatus.claude
+
+  if not claude or not claude.initialized then
+    -- health.info was added in newer Neovim; fall back to ok for compatibility.
+    local info = health.info or health.ok
+    info('Claude integration not active (claude not installed or not in cmds)')
+    return
+  end
+
+  if not claude.port or claude.port == 0 then
+    health.warn('Claude WS server not listening on any port')
+  else
+    health.ok('Claude WS server running on port ' .. tostring(claude.port))
+  end
+  if claude.authConfigured then
+    health.ok('Claude auth token configured')
+  else
+    health.warn('Claude auth token not configured')
+  end
+  health.ok('Claude clients connected: ' .. tostring(claude.clients or 0))
+
+  -- Lock file check.
+  local hasLock, lockfile = pcall(require, 'gemini.claude.lockfile')
+  if hasLock and claude.port then
+    local data = lockfile.read(claude.port)
+    if not data then
+      health.warn('Claude lock file not found for port ' .. tostring(claude.port))
+    elseif data.transport ~= 'ws' or not data.authToken then
+      health.warn('Claude lock file is malformed (missing transport/authToken)')
+    elseif data.pid == vim.fn.getpid() then
+      health.ok('Claude lock file: ' .. lockfile.lock_path(claude.port) .. ' (current session)')
+    else
+      health.warn(
+        'Claude lock file belongs to another session (PID: ' .. tostring(data.pid) .. ')'
+      )
+    end
+  end
+end
+
 M.check = function()
   health.start('nvim-gemini-companion health check')
 
@@ -73,6 +117,13 @@ M.check = function()
     health.warn('Qwen CLI is not installed or not in PATH')
   end
 
+  -- Check if claude CLI is available
+  if vim.fn.executable('claude') == 1 then
+    health.ok('Claude Code CLI is installed')
+  else
+    health.warn('Claude Code CLI is not installed or not in PATH')
+  end
+
   -- Check if plenary.nvim is available
   local hasPlenary, _ = pcall(require, 'plenary')
   if hasPlenary then
@@ -83,6 +134,9 @@ M.check = function()
 
   -- Check if mcp-server is initialized
   M.serverStatus()
+
+  -- Check Claude WebSocket integration status
+  M.claudeServerStatus()
 
   -- Check for server details file from persistence module
   M.checkServerDetails()
